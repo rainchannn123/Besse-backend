@@ -51,6 +51,14 @@ const envSchema = z.object({
 
   // Logging level for application logs (error, warn, info, debug)
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+
+  // Admin monitor controls (separate from player/admin DB accounts)
+  ADMIN_MONITOR_ENABLED: z
+    .string()
+    .default('true')
+    .transform(value => value === 'true'),
+  ADMIN_MONITOR_USERNAME: z.string().default(''),
+  ADMIN_MONITOR_PASSWORD: z.string().default(''),
 });
 
 // Parse and validate environment variables

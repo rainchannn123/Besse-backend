@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import {
+  continueToPairing,
+  continueToRoleSelection,
   createLobby,
   deselectRole,
   forcePairingCheck,
@@ -17,7 +19,13 @@ import {
   startNewGame,
 } from '../controllers/lobbyController';
 import { protect } from '../middleware/auth';
-import { joinLobbySchema, selectRoleSchema } from '../types';
+import {
+  continueToPairingSchema,
+  continueToRoleSelectionSchema,
+  joinLobbySchema,
+  leaveLobbySchema,
+  selectRoleSchema,
+} from '../types';
 import { validate } from '../utils/validation';
 
 const router = Router();
@@ -329,7 +337,19 @@ router.get('/:sessionId', getLobbyState);
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.post('/leave', leaveLobby);
+router.post('/leave', validate(leaveLobbySchema), leaveLobby);
+
+router.post(
+  '/continue-to-role-selection',
+  validate(continueToRoleSelectionSchema),
+  continueToRoleSelection
+);
+
+router.post(
+  '/continue-to-pairing',
+  validate(continueToPairingSchema),
+  continueToPairing
+);
 
 /**
  * @swagger

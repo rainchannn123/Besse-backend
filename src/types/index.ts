@@ -20,10 +20,18 @@ export interface DecodedToken {
 }
 
 // Lobby & Session Types
+export type LobbyStage =
+  | 'waiting-room'
+  | 'role-selection'
+  | 'pairing'
+  | 'in-game'
+  | 'completed';
+
 export interface LobbyState {
   sessionId: string;
   lobbyCode: string; // 6-character alphanumeric code for joining
   leader: string; // User ID of the lobby leader
+  stage: LobbyStage;
   players: {
     userId: string;
     name: string;
@@ -135,6 +143,7 @@ export interface GameConstants {
 
   // Auction and Broker settings
   AUCTION_DURATION_SECONDS: number; // 30 seconds
+  AUCTION_BID_INCREMENT_RATE: number; // 0.05 => 5% of entry price per click
   PLAYER_BID_CAP: number; // 10 active bids
   MARKUP_CONSTANT: number; // 2.5x
 
@@ -211,6 +220,9 @@ export interface GameState {
     glass: number;
     wood: number;
   };
+
+  // NEW: Surrender voting — all 3 must agree within the enabled window
+  surrenderVotes: string[]; // array of playerIds who have voted to surrender
 
   // NEW: Marketplace Listing for live auctions
   marketplaceListing: Auction[];
@@ -305,6 +317,7 @@ export interface CityProject {
   progress: number;
   completed: boolean;
   healthBonus: number;
+  budgetBonus: number;
   deadline: number;
 }
 
@@ -339,6 +352,24 @@ export const loginSchema = z.object({
   }),
 });
 
+export const adminLoginSchema = z.object({
+  body: z.object({
+    username: z.string().min(1, 'Username is required'),
+    password: z.string().min(1, 'Password is required'),
+  }),
+});
+
+export const adminForceExitSchema = z.object({
+  params: z.object({
+    userId: z.string().min(1, 'User ID is required'),
+  }),
+  body: z
+    .object({
+      reason: z.string().max(200).optional(),
+    })
+    .optional(),
+});
+
 export const createLobbySchema = z.object({
   body: z.object({}),
 });
@@ -358,6 +389,24 @@ export const selectRoleSchema = z.object({
   body: z.object({
     sessionId: z.string().min(1, 'Session ID is required'),
     role: z.enum(['municipality', 'mrf', 'broker']),
+  }),
+});
+
+export const leaveLobbySchema = z.object({
+  body: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
+
+export const continueToRoleSelectionSchema = z.object({
+  body: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
+
+export const continueToPairingSchema = z.object({
+  body: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
   }),
 });
 
@@ -424,6 +473,11 @@ export type RegisterInput = z.infer<typeof registerSchema>['body'];
 export type LoginInput = z.infer<typeof loginSchema>['body'];
 export type JoinLobbyInput = z.infer<typeof joinLobbySchema>['body'];
 export type SelectRoleInput = z.infer<typeof selectRoleSchema>['body'];
+export type LeaveLobbyInput = z.infer<typeof leaveLobbySchema>['body'];
+export type ContinueToRoleSelectionInput = z.infer<
+  typeof continueToRoleSelectionSchema
+>['body'];
+export type ContinueToPairingInput = z.infer<typeof continueToPairingSchema>['body'];
 export type CollectWasteInput = z.infer<typeof collectWasteSchema>;
 export type ProcessWasteInput = z.infer<typeof processWasteSchema>['body'];
 export type AssignGradeInput = z.infer<typeof assignGradeSchema>['body'];

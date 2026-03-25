@@ -121,6 +121,7 @@ export class GameService {
           wood: Math.floor(Math.random() * 56) + 10,
         },
         activeBids: {},
+        surrenderVotes: [],
       };
 
       // Spawn initial waste batch immediately (Day 1 - Hour 0)
@@ -177,6 +178,7 @@ export class GameService {
           { sessionId },
           {
             status: 'ready',
+            stage: 'pairing',
             pairId: null,
             partnerSessionId: null,
             teamRole: null,
@@ -206,7 +208,9 @@ export class GameService {
         requiredMaterials: { paper: 10, wood: 5 },
         progress: 0,
         completed: false,
-        healthBonus: 5,
+        // Editable reward values
+        healthBonus: 4,
+        budgetBonus: 800,
         deadline: 10,
       },
       {
@@ -215,7 +219,9 @@ export class GameService {
         requiredMaterials: { metal: 8, plastic: 6 },
         progress: 0,
         completed: false,
-        healthBonus: 5,
+        // Editable reward values
+        healthBonus: 9,
+        budgetBonus: 650,
         deadline: 15,
       },
       {
@@ -224,7 +230,9 @@ export class GameService {
         requiredMaterials: { glass: 12, paper: 8, wood: 4 },
         progress: 0,
         completed: false,
-        healthBonus: 5,
+        // Editable reward values
+        healthBonus: 13,
+        budgetBonus: 900,
         deadline: 12,
       },
       {
@@ -233,8 +241,21 @@ export class GameService {
         requiredMaterials: { metal: 15, plastic: 10 },
         progress: 0,
         completed: false,
-        healthBonus: 5,
+        // Editable reward values
+        healthBonus: 10,
+        budgetBonus: 1800,
         deadline: 20,
+      },
+      {
+        id: 'p-5',
+        name: 'Waste-to-Energy Plant',
+        requiredMaterials: { metal: 10, glass: 8, plastic: 6 },
+        progress: 0,
+        completed: false,
+        // Editable reward values
+        healthBonus: 15,
+        budgetBonus: 1500,
+        deadline: 25,
       },
     ];
   }
@@ -1430,6 +1451,11 @@ export class GameService {
 
         // Update pair score in database
         await this.updatePairScore(gameState);
+
+        // Mark lobby as completed so players can leave after game over
+        if (sessionId) {
+          await Lobby.findOneAndUpdate({ sessionId }, { status: 'completed' });
+        }
 
         // Emit partner-eliminated event when team is eliminated due to countdown
         if (gameState.partnerSessionId) {

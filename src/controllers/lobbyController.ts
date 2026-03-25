@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
 import { GameService } from '../services/gameService';
 import { LobbyService } from '../services/lobbyService';
-import { JoinLobbyInput, SelectRoleInput } from '../types';
+import {
+  ContinueToPairingInput,
+  ContinueToRoleSelectionInput,
+  JoinLobbyInput,
+  LeaveLobbyInput,
+  SelectRoleInput,
+} from '../types';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendResponse } from '../utils/response';
 
@@ -64,12 +70,34 @@ export const getLobbyState = asyncHandler(
 
 export const leaveLobby = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const { sessionId } = req.body;
+    const { sessionId }: LeaveLobbyInput = req.body;
     const userId = (req as any).user._id;
 
-    await LobbyService.leaveLobby(sessionId, userId);
+    const leaveResult = await LobbyService.leaveLobby(sessionId, userId);
 
-    sendResponse(res, 200, 'Left lobby successfully');
+    sendResponse(res, 200, 'Left lobby successfully', { leaveResult });
+  }
+);
+
+export const continueToRoleSelection = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { sessionId }: ContinueToRoleSelectionInput = req.body;
+    const userId = (req as any).user._id;
+
+    const lobbyState = await LobbyService.continueToRoleSelection(sessionId, userId.toString());
+
+    sendResponse(res, 200, 'Lobby advanced to role selection', { lobbyState });
+  }
+);
+
+export const continueToPairing = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { sessionId }: ContinueToPairingInput = req.body;
+    const userId = (req as any).user._id;
+
+    const lobbyState = await LobbyService.continueToPairing(sessionId, userId.toString());
+
+    sendResponse(res, 200, 'Lobby advanced to pairing', { lobbyState });
   }
 );
 
@@ -121,6 +149,12 @@ export const joinPairingQueue = asyncHandler(
     const isInLobby = lobby.players.some(p => p.userId === userId.toString());
     if (!isInLobby) {
       sendResponse(res, 403, 'You are not part of this team/lobby');
+      return;
+    }
+
+    // Only group leader can start queueing
+    if (lobby.leader !== userId.toString()) {
+      sendResponse(res, 403, 'Only the group leader can start queueing');
       return;
     }
 

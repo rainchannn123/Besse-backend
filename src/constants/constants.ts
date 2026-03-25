@@ -74,6 +74,7 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
 
   // Auction and Broker settings
   AUCTION_DURATION_SECONDS: 30,
+  AUCTION_BID_INCREMENT_RATE: 0.05,
   PLAYER_BID_CAP: 10,
   MARKUP_CONSTANT: 2.5,
 

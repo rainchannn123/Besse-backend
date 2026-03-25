@@ -1,4 +1,5 @@
 import { GameState } from '../types';
+import { ForbiddenError, NotFoundError, ValidationError } from '../utils/AppError';
 import { CalculationService } from './calculationService';
 import { GameService } from './gameService';
 import { WebSocketService } from './websocketService';
@@ -92,7 +93,9 @@ export class MunicipalityService {
       // Check budget
       if (gameState.budget < transportCost) {
         GameService.releaseLock(gameState, batchId);
-        throw new Error('Insufficient budget to collect waste');
+        throw new ValidationError(
+          `Insufficient budget. Collection costs $${transportCost.toFixed(2)} but current budget is $${gameState.budget.toFixed(2)}.`
+        );
       }
 
       // Execute collection as per manual
@@ -312,47 +315,26 @@ export class MunicipalityService {
   ): Promise<GameState> {
     const gameState = await GameService.getGameState(sessionId);
     if (!gameState) {
-      throw new Error('Game session not found');
+      throw new NotFoundError('Game session not found');
     }
 
     if (gameState.gameStatus !== 'active') {
-      throw new Error('Game is not active');
+      throw new ValidationError('Game is not active');
     }
 
     // Verify player is municipality
     if (gameState.players.municipality.toString() !== playerId.toString()) {
-      throw new Error('Only municipality player can contribute to projects');
+      throw new ForbiddenError('Only municipality player can contribute to projects');
     }
 
     // Find the project
     const project = gameState.cityProjects.find(p => p.id === projectId);
     if (!project) {
-      throw new Error('Project not found');
+      throw new NotFoundError('Project not found');
     }
 
     if (project.completed) {
-      throw new Error('Project is already completed');
-    }
-
-    // Check if project is available (unlocked)
-    const projectOrder = ['p-1', 'p-2', 'p-3', 'p-4'];
-    const projectIndex = projectOrder.indexOf(projectId);
-
-    if (projectIndex === 0) {
-      // P-1 is always available
-    } else if (projectIndex > 0) {
-      // Check if previous project is completed
-      const prevProjectId = projectOrder[projectIndex - 1];
-      const prevProject = gameState.cityProjects.find(
-        p => p.id === prevProjectId
-      );
-      if (!prevProject || !prevProject.completed) {
-        throw new Error(
-          `Project ${project.name} is locked. Complete ${prevProject?.name || 'previous project'} first.`
-        );
-      }
-    } else {
-      throw new Error('Invalid project ID');
+      throw new ValidationError('Project is already completed');
     }
 
     if (!project.addedMaterials) {
@@ -366,7 +348,7 @@ export class MunicipalityService {
       !project.requiredMaterials[materialTypeKey] ||
       project.requiredMaterials[materialTypeKey]! <= 0
     ) {
-      throw new Error(
+      throw new ValidationError(
         `Material ${materialType} is not required for this project`
       );
     }
@@ -375,7 +357,7 @@ export class MunicipalityService {
     const totalAvailable = gameState.municipalInventory[materialType as keyof typeof gameState.municipalInventory];
 
     if (totalAvailable < materialAmount) {
-      throw new Error(
+      throw new ValidationError(
         `Insufficient ${materialType} in municipality inventory. Available: ${totalAvailable.toFixed(1)} tons, Requested: ${materialAmount} tons`
       );
     }
@@ -401,20 +383,12 @@ export class MunicipalityService {
 
     if (project.progress >= 100) {
       project.completed = true;
+      const budgetBonus = project.budgetBonus ?? 0;
       gameState.cityHealth += project.healthBonus;
+      gameState.budget += budgetBonus;
       gameState.activityLog.unshift(
-        `🎉 ${project.name} completed! +${project.healthBonus}% Health`
+        `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${budgetBonus.toFixed(0)} Budget`
       );
-      // Unlock next project
-      if (projectIndex >= 0 && projectIndex < projectOrder.length - 1) {
-        const nextProjectId = projectOrder[projectIndex + 1];
-        const nextProject = gameState.cityProjects.find(
-          p => p.id === nextProjectId
-        );
-        if (nextProject) {
-          // Projects are implicitly available when previous is completed
-        }
-      }
     } else {
       gameState.activityLog.unshift(
         `[Municipality] Contributed ${materialAmount.toFixed(1)} tons ${materialType} to ${project.name}. Progress: ${project.progress.toFixed(1)}%`
@@ -430,7 +404,7 @@ export class MunicipalityService {
     WebSocketService.broadcastSystemMessage(
       sessionId,
       project.completed
-        ? `🎉 ${project.name} completed! +${project.healthBonus}% Health. Updated Health: ${gameState.cityHealth.toFixed(1)}%`
+        ? `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget. Updated Health: ${gameState.cityHealth.toFixed(1)}%, Budget: $${gameState.budget.toFixed(0)}`
         : `Municipality contributed ${materialAmount.toFixed(1)} tons ${materialType} to ${project.name}. Progress: ${project.progress.toFixed(1)}%`,
       'info'
     );
@@ -447,6 +421,8 @@ export class MunicipalityService {
           materialAmount,
           progress: project.progress,
           completed: project.completed,
+          healthBonusApplied: project.completed ? project.healthBonus : 0,
+          budgetBonusApplied: project.completed ? (project.budgetBonus ?? 0) : 0,
         }
       );
     } catch (err) {

@@ -6,6 +6,8 @@ import {
 } from '../middleware/socketAuth';
 import { GameState } from '../types';
 import { logger } from '../utils/logger';
+import { GameService } from './gameService';
+import Lobby from '../models/Lobby';
 
 export class WebSocketService {
   private static io: SocketIOServer;
@@ -98,6 +100,85 @@ export class WebSocketService {
         }
 
         logger.warn(`User ${socket.user?.name} left game room: ${sessionId}`);
+      });
+
+      // Handle surrender vote toggle
+      socket.on('surrender-toggle', async (data: { sessionId: string }) => {
+        const { sessionId } = data;
+        const playerId = socket.userId!;
+
+        try {
+          const hasAccess = await validateGameAccess(socket, sessionId);
+          if (!hasAccess) {
+            socket.emit('error', { message: 'You do not have access to this game session' });
+            return;
+          }
+
+          const gameState = await GameService.getGameState(sessionId);
+          if (!gameState || gameState.gameStatus !== 'active') {
+            socket.emit('surrender-error', { message: 'Game is not active' });
+            return;
+          }
+
+          // Only available after 15 minutes of play
+          if ((gameState.minutesElapsed || 0) < 15) {
+            socket.emit('surrender-error', {
+              message: 'Surrender is only available after 15 minutes of play',
+            });
+            return;
+          }
+
+          // Initialize if missing (backward compat)
+          if (!gameState.surrenderVotes) gameState.surrenderVotes = [];
+
+          const voteIndex = gameState.surrenderVotes.indexOf(playerId);
+          if (voteIndex === -1) {
+            gameState.surrenderVotes.push(playerId);
+            logger.info(`[Surrender] ${socket.user?.name} voted to surrender in session ${sessionId}`);
+          } else {
+            gameState.surrenderVotes.splice(voteIndex, 1);
+            logger.info(`[Surrender] ${socket.user?.name} withdrew surrender vote in session ${sessionId}`);
+          }
+
+          const totalVotes = gameState.surrenderVotes.length;
+
+          // Check if all 3 players surrendered
+          if (totalVotes >= 3) {
+            gameState.gameStatus = 'lost';
+            gameState.activityLog.unshift('[SURRENDER] All players have surrendered. The game has ended.');
+
+            // Update pair status
+            if (gameState.teamRole === 'Team A') {
+              gameState.pairStatus = 'team_a_eliminated';
+            } else if (gameState.teamRole === 'Team B') {
+              gameState.pairStatus = 'team_b_eliminated';
+            }
+
+            // Mark lobby as completed
+            await Lobby.findOneAndUpdate({ sessionId }, { status: 'completed' });
+
+            await GameService.updateGameState(sessionId, gameState);
+
+            // Broadcast final game state so all players route to game-over
+            this.emitToGameRoom(sessionId, 'game-state-full', {
+              gameState,
+              actionType: 'surrender',
+              surrenderVotes: gameState.surrenderVotes,
+              totalVotes,
+            });
+          } else {
+            await GameService.updateGameState(sessionId, gameState);
+
+            // Broadcast updated vote count to all players in the session
+            this.emitToGameRoom(sessionId, 'surrender-update', {
+              surrenderVotes: gameState.surrenderVotes,
+              totalVotes,
+            });
+          }
+        } catch (err) {
+          logger.error('[Surrender] Error handling surrender-toggle:', err);
+          socket.emit('error', { message: 'Failed to process surrender vote' });
+        }
       });
 
       // Handle disconnection

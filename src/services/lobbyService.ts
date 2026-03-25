@@ -5,11 +5,86 @@ import Lobby, { ILobby } from '../models/Lobby';
 import PairScore from '../models/PairScore';
 import User from '../models/User';
 import { LobbyState } from '../types';
-import { NotFoundError } from '../utils/AppError';
+import {
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../utils/AppError';
 import { generateUniqueLobbyCode, isValidLobbyCode } from '../utils/lobbyCode';
 import { WebSocketService } from './websocketService';
 
+type LeaveLobbyResult = {
+  sessionId: string;
+  leftUserId: string;
+  leftUserName: string;
+  leader: string | null;
+  status: LobbyState['status'] | 'closed';
+  currentSessionCleared: boolean;
+  lobbyDeleted: boolean;
+  playersRemaining: number;
+  alreadyLeft: boolean;
+  lobbyState: LobbyState | null;
+};
+
 export class LobbyService {
+  private static async broadcastLobbyState(
+    sessionId: string,
+    reason?: string
+  ): Promise<LobbyState> {
+    const lobbyState = await LobbyService.getLobbyState(sessionId);
+
+    WebSocketService.emitToGameRoom(sessionId, 'lobby-state-update', {
+      lobbyState,
+      reason,
+    });
+
+    return lobbyState;
+  }
+
+  private static calculateLobbyStatus(lobby: ILobby): ILobby['status'] {
+    const allRolesSelected = lobby.players.every(p => p.selectedRole !== null);
+    const uniqueRoles = new Set(
+      lobby.players
+        .map(p => p.selectedRole)
+        .filter((role): role is NonNullable<typeof role> => role !== null)
+    );
+
+    if (
+      lobby.players.length === lobby.maxPlayers &&
+      allRolesSelected &&
+      uniqueRoles.size === lobby.maxPlayers
+    ) {
+      return 'ready';
+    }
+
+    return 'waiting';
+  }
+
+  private static emitLobbyLeftEvents(
+    sessionId: string,
+    leftUserId: string,
+    leftUserName: string,
+    lobbyState: LobbyState | null,
+    lobbyClosed: boolean
+  ) {
+    WebSocketService.emitToGameRoom(sessionId, 'player-left', {
+      userId: leftUserId,
+      leftUserId,
+      playerId: leftUserId,
+      playerName: leftUserName,
+      lobbyClosed,
+      playersRemaining: lobbyState?.players.length ?? 0,
+      leader: lobbyState?.leader ?? null,
+      status: lobbyState?.status ?? 'closed',
+      lobbyState,
+    });
+
+    WebSocketService.emitToGameRoom(sessionId, 'lobby-state-update', {
+      lobbyState,
+      lobbyClosed,
+    });
+  }
+
   static async createLobby(userId: string, userName: string): Promise<ILobby> {
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
@@ -20,6 +95,7 @@ export class LobbyService {
       sessionId: newSessionId,
       lobbyCode: newLobbyCode,
       leader: userObjectId,
+      stage: 'waiting-room',
       players: [
         {
           userId: userObjectId,
@@ -66,6 +142,7 @@ export class LobbyService {
           sessionId: newSessionId,
           lobbyCode: newLobbyCode,
           leader: userObjectId,
+          stage: 'waiting-room',
           players: [
             {
               userId: userObjectId,
@@ -99,9 +176,91 @@ export class LobbyService {
       selectedRole: null,
       joinedAt: new Date(),
     });
+    lobby.stage = 'waiting-room';
     await User.findByIdAndUpdate(userId, { currentSession: lobby.sessionId });
     await lobby.save();
+
+    // Notify all connected teammates in this lobby immediately.
+    await this.broadcastLobbyState(lobby.sessionId, 'player-joined');
+
     return lobby;
+  }
+
+  static async continueToRoleSelection(
+    sessionId: string,
+    userId: string
+  ): Promise<LobbyState> {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const lobby = await Lobby.findOne({ sessionId });
+
+    if (!lobby) {
+      throw new NotFoundError('Lobby not found');
+    }
+
+    const player = lobby.players.find(p => p.userId.equals(userObjectId));
+    if (!player) {
+      throw new ForbiddenError('You are not part of this lobby');
+    }
+
+    if (!lobby.leader.equals(userObjectId)) {
+      throw new ForbiddenError('Only the group leader can continue');
+    }
+
+    if (lobby.stage === 'role-selection') {
+      return LobbyService.getLobbyState(sessionId);
+    }
+
+    if (lobby.stage !== 'waiting-room') {
+      throw new ValidationError('Lobby is not in the waiting-room stage');
+    }
+
+    if (lobby.players.length !== lobby.maxPlayers) {
+      throw new ValidationError('Lobby must have exactly 3 joined players before continuing');
+    }
+
+    lobby.stage = 'role-selection';
+    lobby.status = this.calculateLobbyStatus(lobby);
+    await lobby.save();
+
+    return this.broadcastLobbyState(sessionId, 'role-selection-entered');
+  }
+
+  static async continueToPairing(
+    sessionId: string,
+    userId: string
+  ): Promise<LobbyState> {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const lobby = await Lobby.findOne({ sessionId });
+
+    if (!lobby) {
+      throw new NotFoundError('Lobby not found');
+    }
+
+    const player = lobby.players.find(p => p.userId.equals(userObjectId));
+    if (!player) {
+      throw new ForbiddenError('You are not part of this lobby');
+    }
+
+    if (!lobby.leader.equals(userObjectId)) {
+      throw new ForbiddenError('Only the group leader can continue');
+    }
+
+    if (lobby.stage === 'pairing') {
+      return LobbyService.getLobbyState(sessionId);
+    }
+
+    if (lobby.stage !== 'role-selection') {
+      throw new ValidationError('Lobby is not in the role-selection stage');
+    }
+
+    if (lobby.status !== 'ready') {
+      throw new ValidationError('Lobby must be ready before continuing to pairing');
+    }
+
+    lobby.stage = 'pairing';
+    await lobby.save();
+
+    return this.broadcastLobbyState(sessionId, 'pairing-entered');
   }
 
   static async selectRole(
@@ -134,14 +293,10 @@ export class LobbyService {
     await lobby.save();
 
     // Emit real-time lobby state update when all roles are selected and status becomes ready
-    if (lobby.status === 'ready') {
-      const lobbyState = await LobbyService.getLobbyState(sessionId);
-      WebSocketService.emitToGameRoom(
-        sessionId,
-        'lobby-state-update',
-        lobbyState
-      );
-    }
+    await this.broadcastLobbyState(
+      sessionId,
+      lobby.status === 'ready' ? 'roles-ready' : 'role-selected'
+    );
 
     return lobby;
   }
@@ -166,12 +321,7 @@ export class LobbyService {
     await lobby.save();
 
     // Emit real-time lobby state update when role is deselected and status changes back to waiting
-    const lobbyState = await LobbyService.getLobbyState(sessionId);
-    WebSocketService.emitToGameRoom(
-      sessionId,
-      'lobby-state-update',
-      lobbyState
-    );
+    await this.broadcastLobbyState(sessionId, 'role-deselected');
 
     return lobby;
   }
@@ -187,6 +337,7 @@ export class LobbyService {
       sessionId: lobby.sessionId,
       lobbyCode: lobby.lobbyCode,
       leader: lobby.leader.toString(),
+      stage: lobby.stage,
       players: lobby.players.map(p => ({
         userId: (p.userId as any)._id
           ? (p.userId as any)._id.toString()
@@ -205,23 +356,116 @@ export class LobbyService {
     };
   }
 
-  static async leaveLobby(sessionId: string, userId: string): Promise<void> {
+  static async leaveLobby(
+    sessionId: string,
+    userId: string
+  ): Promise<LeaveLobbyResult> {
     const userObjectId = new mongoose.Types.ObjectId(userId);
+    const user = await User.findById(userId).select('name currentSession');
+    if (!user) throw new NotFoundError('User not found');
+
     const lobby = await Lobby.findOne({ sessionId });
-    if (!lobby) throw new NotFoundError('Lobby not found');
+    const currentSessionCleared = user.currentSession === sessionId;
+
+    if (!lobby) {
+      if (currentSessionCleared) {
+        await User.findByIdAndUpdate(userId, { currentSession: null });
+      }
+
+      return {
+        sessionId,
+        leftUserId: userId,
+        leftUserName: user.name,
+        leader: null,
+        status: 'closed',
+        currentSessionCleared,
+        lobbyDeleted: true,
+        playersRemaining: 0,
+        alreadyLeft: true,
+        lobbyState: null,
+      };
+    }
+
+    if (lobby.status === 'active') {
+      throw new ValidationError('Cannot leave a lobby while the game is active');
+    }
+
+    const playerToRemove = lobby.players.find(p => p.userId.equals(userObjectId));
+
+    if (!playerToRemove) {
+      if (currentSessionCleared) {
+        await User.findByIdAndUpdate(userId, { currentSession: null });
+      }
+
+      return {
+        sessionId,
+        leftUserId: userId,
+        leftUserName: user.name,
+        leader: lobby.leader.toString(),
+        status: lobby.status,
+        currentSessionCleared,
+        lobbyDeleted: false,
+        playersRemaining: lobby.players.length,
+        alreadyLeft: true,
+        lobbyState: await LobbyService.getLobbyState(sessionId),
+      };
+    }
+
+    await this.removeFromPairingQueue(sessionId);
+
+    const leftUserName = playerToRemove.name;
+    const leaderLeft = lobby.leader.equals(userObjectId);
 
     lobby.players = lobby.players.filter(p => !p.userId.equals(userObjectId));
-    await User.findByIdAndUpdate(userId, { currentSession: null });
 
-    if (lobby.players.length === 0) await Lobby.findByIdAndDelete(lobby._id);
-    else {
-      const allRolesSelected = lobby.players.every(
-        p => p.selectedRole !== null
-      );
-      const uniqueRoles = new Set(lobby.players.map(p => p.selectedRole));
-      if (!allRolesSelected || uniqueRoles.size < 3) lobby.status = 'waiting';
-      await lobby.save();
+    if (currentSessionCleared) {
+      await User.findByIdAndUpdate(userId, { currentSession: null });
     }
+
+    if (lobby.players.length === 0) {
+      await Lobby.findByIdAndDelete(lobby._id);
+      this.emitLobbyLeftEvents(sessionId, userId, leftUserName, null, true);
+
+      return {
+        sessionId,
+        leftUserId: userId,
+        leftUserName,
+        leader: null,
+        status: 'closed',
+        currentSessionCleared,
+        lobbyDeleted: true,
+        playersRemaining: 0,
+        alreadyLeft: false,
+        lobbyState: null,
+      };
+    }
+
+    if (leaderLeft) {
+      lobby.leader = lobby.players[0].userId;
+    }
+
+    if (lobby.players.length < lobby.maxPlayers && lobby.stage !== 'in-game') {
+      lobby.stage = 'waiting-room';
+    }
+
+    lobby.status = this.calculateLobbyStatus(lobby);
+    await lobby.save();
+
+    const lobbyState = await LobbyService.getLobbyState(sessionId);
+    this.emitLobbyLeftEvents(sessionId, userId, leftUserName, lobbyState, false);
+
+    return {
+      sessionId,
+      leftUserId: userId,
+      leftUserName,
+      leader: lobbyState.leader,
+      status: lobbyState.status,
+      currentSessionCleared,
+      lobbyDeleted: false,
+      playersRemaining: lobbyState.players.length,
+      alreadyLeft: false,
+      lobbyState,
+    };
   }
 
   static async startGame(sessionId: string): Promise<ILobby> {
@@ -240,6 +484,7 @@ export class LobbyService {
       );
 
     lobby.status = 'active';
+    lobby.stage = 'in-game';
     await lobby.save();
     WebSocketService.emitToGameRoom(sessionId, 'lobby-activated', lobby);
     return lobby;
@@ -264,6 +509,12 @@ export class LobbyService {
   ): Promise<{ queuePosition: number; message: string }> {
     const lobby = await Lobby.findOne({ sessionId, status: 'ready' });
     if (!lobby) throw new Error('Lobby not ready to join pairing queue');
+
+    if (lobby.stage !== 'pairing') {
+      lobby.stage = 'pairing';
+      await lobby.save();
+      await this.broadcastLobbyState(sessionId, 'pairing-entered');
+    }
 
     const alreadyQueued = this.unpairedTeamsQueue.find(
       t => t.sessionId === sessionId
@@ -518,6 +769,15 @@ export class LobbyService {
       t => t.sessionId !== sessionId
     );
 
+    if (wasInQueue) {
+      const lobby = await Lobby.findOne({ sessionId });
+      if (lobby && lobby.stage === 'pairing' && lobby.status !== 'active') {
+        lobby.stage = 'role-selection';
+        await lobby.save();
+        await this.broadcastLobbyState(sessionId, 'pairing-left');
+      }
+    }
+
     // Emit WebSocket event for pairing-left if team was actually in queue
     if (wasInQueue) {
       WebSocketService.emitToGameRoom(sessionId, 'pairing-left', {});
@@ -536,10 +796,7 @@ export class LobbyService {
     // Fetch lobby and current game session concurrently for better performance
     const [lobby, currentGame] = await Promise.all([
       Lobby.findOne({ sessionId }),
-      GameSession.findOne({
-        sessionId,
-        status: { $in: ['completed', 'lost', 'won'] },
-      }),
+      GameSession.findOne({ sessionId }),
     ]);
 
     // Check if lobby exists
@@ -547,29 +804,25 @@ export class LobbyService {
       throw new Error('Lobby not found');
     }
 
-    // Check if there's an active game that hasn't ended
-    const activeGame = await GameSession.findOne({
-      sessionId,
-      gameStatus: { $in: ['completed', 'lost', 'won'] },
-    });
-
-    if (activeGame) {
+    // Check if there's an active game that hasn't ended yet
+    if (currentGame?.gameState?.gameStatus === 'active') {
       throw new Error(
         'Current game is still in progress. Cannot start a new game.'
       );
     }
 
-    // Verify user is the lobby leader
-    if (lobby.leader.toString() !== userId.toString()) {
-      throw new Error('Only the team owner can start a new game');
+    // Verify requester belongs to this lobby
+    const isLobbyPlayer = lobby.players.some(
+      p => p.userId.toString() === userId.toString()
+    );
+    if (!isLobbyPlayer) {
+      throw new Error('Only players in this team can start a new game');
     }
 
     // Ensure lobby has players
     if (!lobby.players || lobby.players.length === 0) {
       throw new Error('Lobby has no players');
     }
-
-    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     // Generate new session and lobby code
     const [newSessionId, newLobbyCode] = await Promise.all([
@@ -587,16 +840,12 @@ export class LobbyService {
       );
     }
 
-    // Create a copy of the original lobby state for logging/auditing
-    const originalLobby = { ...lobby.toObject() };
-
     const existingPlayers = lobby.players.map(p => p);
-
-    lobby.players = lobby.players.map(p => p);
     const newLobby = await Lobby.create({
       sessionId: newSessionId,
       lobbyCode: newLobbyCode,
-      leader: userObjectId,
+      leader: lobby.leader,
+      stage: 'waiting-room',
       players: [...existingPlayers],
       status: 'ready',
       maxPlayers: 3,

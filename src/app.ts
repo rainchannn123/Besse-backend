@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { errorLogger, requestLogger } from './middleware/logger';
 import { securityHeaders } from './middleware/security';
 import GameSession from './models/GameSession';
+import adminRoutes from './routes/adminRoutes';
 import authRoutes from './routes/authRoutes';
 import brokerRoutes from './routes/brokerRoutes';
 import gameRoutes from './routes/gameRoutes';
@@ -51,6 +52,7 @@ app.use(requestLogger);
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/lobby', lobbyRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/municipality', municipalityRoutes);
@@ -185,26 +187,12 @@ setInterval(async () => {
             'warning'
           );
         } else {
-          // Countdown has ended - send full game state immediately
+          // Countdown reached zero: force an immediate system check so game
+          // transitions to final status without waiting for the 30s scheduler.
           try {
-            const payload = {
-              gameState,
-              countdownTimeRemaining: 0,
-              turnSummary: GameService.getTurnSummary(gameState),
-              statistics: GameService.getGameStatistics(gameState),
-              realtimeUpdate: GameService.getRealtimeUpdatePayload(gameState),
-              pairData: null, // Can be populated if needed
-              actionType: 'game-over',
-              actionDetails: {
-                reason: gameState.gameOverCountdown.reason,
-              },
-            };
-            WebSocketService.broadcastFullGameState(session.sessionId, payload);
+            await GameService.performSystemCheck(session.sessionId);
           } catch (err) {
-            logger.error(
-              'Error broadcasting full game state on countdown expiry',
-              err
-            );
+            logger.error('Error finalizing game on countdown expiry', err);
           }
         }
       }

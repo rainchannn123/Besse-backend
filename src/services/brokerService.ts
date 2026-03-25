@@ -89,7 +89,8 @@ export class BrokerService {
 
     // Calculate new bid amount using entry price (immutable, set by MRF)
     const entryPrice = auction.entryPrice;
-    const bidIncrement = Math.max(entryPrice * 0.05, 50); // 5% of entry price or $50 minimum
+    const bidIncrement =
+      entryPrice * gameState.constants.AUCTION_BID_INCREMENT_RATE;
     const newBidAmount = auction.currentBid + bidIncrement;
 
     // Check 2: Budget validation
