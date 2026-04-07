@@ -21,6 +21,7 @@ A comprehensive RESTful API with **WebSocket real-time capabilities** for the **
 
 ## 🎮 Game Overview
 
+
 **BESSE** is a 30-minute real-time multiplayer simulation where players cooperate to:
 - **🏛️ Municipality**: Collect and transport waste from city streets
 - **🏭 MRF**: Process waste into recyclable materials with quality grading
