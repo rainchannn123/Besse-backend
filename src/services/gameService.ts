@@ -24,6 +24,8 @@ export class GameService {
         logger.warn(
           `[GameService] Game already exists for session ${sessionId}, returning existing game state`
         );
+        // Override constants so existing sessions pick up latest values
+        existingGame.gameState.constants = this.constants;
         return existingGame.gameState;
       }
 
@@ -272,6 +274,38 @@ export class GameService {
     return sessions.map(session => session.gameState);
   }
 
+  /**
+   * Get game states scoped to a player's current pair (own session + partner).
+   * When sessionId is provided, uses it directly to avoid picking stale sessions.
+   * This prevents stale/old sessions from leaking into the current game.
+   */
+  static async getPairedGameStates(playerId: string, sessionId?: string): Promise<GameState[]> {
+    const allActive = await this.getAllActiveGameStates();
+    const pid = playerId.toString();
+
+    let playerSession;
+    if (sessionId) {
+      // Directly find the session by ID — avoids picking stale sessions
+      playerSession = allActive.find(gs => gs.sessionId === sessionId);
+    } else {
+      // Fallback: search by player ID (may hit stale sessions)
+      playerSession = allActive.find(
+        gs =>
+          gs.players.municipality?.toString() === pid ||
+          gs.players.mrf?.toString() === pid ||
+          gs.players.broker?.toString() === pid
+      );
+    }
+    if (!playerSession) return [];
+
+    const sessionIds = [playerSession.sessionId];
+    if (playerSession.partnerSessionId) {
+      sessionIds.push(playerSession.partnerSessionId);
+    }
+
+    return allActive.filter(gs => sessionIds.includes(gs.sessionId));
+  }
+
   static async updateGameState(
     sessionId: string,
     gameState: GameState
@@ -294,7 +328,7 @@ export class GameService {
     const origin = origins[Math.floor(Math.random() * origins.length)];
 
     // EXACT Formula: Batch_Mass = Random(10, 25) tons
-    const mass = Math.random() * 15 + 10; // Generates between 10 and 25
+    const mass = Math.round((Math.random() * 15 + 10) * 10) / 10; // Generates between 10.0 and 25.0, rounded to 1 d.p.
 
     // Calculate composition based on origin type
     let composition: WasteBatch['composition'];

@@ -20,6 +20,8 @@ export interface DecodedToken {
 }
 
 // Lobby & Session Types
+export type GameMode = 'waste' | 'energy';
+
 export type LobbyStage =
   | 'waiting-room'
   | 'role-selection'
@@ -31,6 +33,7 @@ export interface LobbyState {
   sessionId: string;
   lobbyCode: string; // 6-character alphanumeric code for joining
   leader: string; // User ID of the lobby leader
+  gameMode: GameMode;
   stage: LobbyStage;
   players: {
     userId: string;
@@ -371,7 +374,9 @@ export const adminForceExitSchema = z.object({
 });
 
 export const createLobbySchema = z.object({
-  body: z.object({}),
+  body: z.object({
+    gameMode: z.enum(['waste', 'energy']).optional().default('waste'),
+  }),
 });
 
 export const joinLobbySchema = z.object({

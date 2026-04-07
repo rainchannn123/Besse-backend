@@ -1,8 +1,12 @@
 import { Auction, GameState } from '../types';
 import { GameService } from './gameService';
 import { WebSocketService } from './websocketService';
+import { logger } from '../utils/logger';
 
 export class BrokerService {
+  // Track scheduled auction timers so they can be cleared if needed
+  private static auctionTimers: Map<string, NodeJS.Timeout> = new Map();
+
   // Helper: Find session containing a specific player
   private static async findPlayerSession(
     playerId: string
@@ -17,20 +21,134 @@ export class BrokerService {
       ) || null
     );
   }
-  // NEW: Get active auctions from all active games
-  static async getActiveAuctions(): Promise<Auction[]> {
-    const allGameStates = await GameService.getAllActiveGameStates();
-    const allActiveAuctions: Auction[] = [];
 
-    for (const gameState of allGameStates) {
-      const activeAuctions = gameState.marketplaceListing.filter(
-        auction => auction.status === 'active'
-      );
-      allActiveAuctions.push(...activeAuctions);
+  /**
+   * Schedule an auction to be resolved immediately when its timer expires.
+   * This is called when an auction is activated, so resolution happens in
+   * real-time rather than waiting for the 30-second system check.
+   */
+  static scheduleAuctionResolution(
+    sessionId: string,
+    auctionId: string,
+    delayMs: number
+  ): void {
+    // Clear any existing timer for this auction (in case of re-activation)
+    const existing = this.auctionTimers.get(auctionId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(async () => {
+      this.auctionTimers.delete(auctionId);
+      try {
+        // Re-read game state fresh from DB
+        const gameState = await GameService.getGameState(sessionId);
+        if (!gameState || gameState.gameStatus !== 'active') return;
+
+        const auction = gameState.marketplaceListing.find(
+          a => a.auctionId === auctionId && a.status === 'active'
+        );
+        if (!auction) return; // Already resolved by system check
+
+        // Resolve this single auction
+        await this.resolveAuction(gameState, auction, sessionId);
+
+        // Set status to sold
+        const idx = gameState.marketplaceListing.findIndex(
+          a => a.auctionId === auctionId
+        );
+        if (idx !== -1) {
+          gameState.marketplaceListing[idx].status = 'sold';
+        }
+
+        await GameService.updateGameState(sessionId, gameState);
+
+        // Broadcast to the auction's session
+        WebSocketService.broadcastSystemMessage(
+          sessionId,
+          `Auction for ${auction.mass.toFixed(1)}t ${auction.materialType} has been resolved`,
+          'info'
+        );
+
+        await GameService.emitFullGameState(
+          sessionId,
+          gameState,
+          'auctions-resolved',
+          { auctionId, resolvedCount: 1 }
+        );
+
+        // Also broadcast to partner session so both brokers see the update
+        if (gameState.partnerSessionId) {
+          const partnerState = await GameService.getGameState(
+            gameState.partnerSessionId
+          );
+          if (partnerState) {
+            await GameService.emitFullGameState(
+              gameState.partnerSessionId,
+              partnerState,
+              'auctions-resolved',
+              { auctionId, resolvedCount: 1 }
+            );
+          }
+        }
+
+        logger.info(
+          `[BrokerService] Auction ${auctionId} resolved immediately on expiry`
+        );
+      } catch (err) {
+        logger.error(
+          `[BrokerService] Failed to resolve auction ${auctionId} on schedule:`,
+          err
+        );
+      }
+    }, delayMs);
+
+    this.auctionTimers.set(auctionId, timer);
+  }
+  // Get all auctions from paired game states, enriched with team role labels
+  static getActiveAuctionsFromStates(gameStates: GameState[]): any[] {
+    const allAuctions: any[] = [];
+
+    // Build a lookup: sessionId → teamRole
+    const sessionTeamRole: Record<string, string> = {};
+    for (const gs of gameStates) {
+      if (gs.sessionId && gs.teamRole) {
+        sessionTeamRole[gs.sessionId] = gs.teamRole;
+      }
     }
 
-    // Sort by end time ascending (earliest first)
-    return allActiveAuctions.sort((a, b) => a.endTime - b.endTime);
+    for (const gameState of gameStates) {
+      // Include active and sold auctions (not pending)
+      const auctions = gameState.marketplaceListing.filter(
+        auction => auction.status === 'active' || auction.status === 'sold'
+      );
+      for (const auction of auctions) {
+        const sellerTeamRole = sessionTeamRole[auction.originTeam] || 'Unknown';
+
+        let highBidderTeamRole: string | null = null;
+        if (auction.highBidderSessionId) {
+          highBidderTeamRole = sessionTeamRole[auction.highBidderSessionId] || null;
+        }
+
+        // Winner is the high bidder once auction is sold
+        let winnerTeamRole: string | null = null;
+        if (auction.status === 'sold' && auction.highBidder) {
+          winnerTeamRole = highBidderTeamRole;
+        }
+
+        allAuctions.push({
+          ...auction,
+          sellerTeamRole,
+          highBidderTeamRole,
+          winnerTeamRole,
+        });
+      }
+    }
+
+    // Sort: active first (by end time asc), then sold
+    return allAuctions.sort((a, b) => {
+      if (a.status === 'active' && b.status !== 'active') return -1;
+      if (a.status !== 'active' && b.status === 'active') return 1;
+      return a.endTime - b.endTime;
+    });
   }
 
   // NEW: Place bid on auction
@@ -53,20 +171,14 @@ export class BrokerService {
     // Initialize activeBids if missing
     if (!gameState.activeBids) gameState.activeBids = {};
 
-    // Check 1: Bid cap validation
     const playerActiveBids = gameState.activeBids[playerId] || 0;
-    if (playerActiveBids >= gameState.constants.PLAYER_BID_CAP) {
-      throw new Error(
-        `Team bid limit reached (${gameState.constants.PLAYER_BID_CAP}/${gameState.constants.PLAYER_BID_CAP}). Wait for auctions to resolve.`
-      );
-    }
 
-    // Find auction across all active sessions
-    const allGameStates = await GameService.getAllActiveGameStates();
+    // Find auction only within the player's paired sessions
+    const pairedStates = await GameService.getPairedGameStates(playerId, sessionId);
     let auction: Auction | null = null;
     let auctionSession: GameState | null = null;
 
-    for (const gs of allGameStates) {
+    for (const gs of pairedStates) {
       const found = gs.marketplaceListing.find(
         a =>
           a.auctionId === auctionId && a.status === 'active' && a.endTime > now
@@ -154,6 +266,14 @@ export class BrokerService {
     await GameService.updateGameState(sessionId, gameState);
     await GameService.updateGameState(auctionSession.sessionId, auctionSession);
 
+    // Broadcast player action for announcement board
+    WebSocketService.broadcastPlayerAction(
+      sessionId,
+      playerId,
+      'Broker',
+      `placed bid of $${newBidAmount.toFixed(0)} on ${auction.mass.toFixed(1)}t ${auction.materialType} (Grade ${auction.grade})`
+    );
+
     // Broadcast a concise bid update to clients and emit full game state
     WebSocketService.broadcastGameStateUpdate(
       sessionId,
@@ -193,9 +313,22 @@ export class BrokerService {
     return gameState;
   }
 
-  // NEW: Resolve expired auctions across all sessions
+  // Resolve expired auctions within the player's paired sessions
   static async resolveExpiredAuctions(sessionId: string): Promise<GameState> {
-    const allGameStates = await GameService.getAllActiveGameStates();
+    const gameState = await GameService.getGameState(sessionId);
+    if (!gameState) throw new Error('Game session not found');
+
+    // Build the list of paired session IDs
+    const pairedSessionIds = [sessionId];
+    if (gameState.partnerSessionId) {
+      pairedSessionIds.push(gameState.partnerSessionId);
+    }
+
+    const allGameStates: GameState[] = [];
+    for (const sid of pairedSessionIds) {
+      const gs = await GameService.getGameState(sid);
+      if (gs && gs.gameStatus === 'active') allGameStates.push(gs);
+    }
     const now = Date.now();
 
     for (const gameState of allGameStates) {
@@ -495,6 +628,14 @@ export class BrokerService {
     );
 
     await GameService.updateGameState(sessionId, gameState);
+
+    // Broadcast player action for announcement board
+    WebSocketService.broadcastPlayerAction(
+      sessionId,
+      playerId,
+      'Broker',
+      `purchased ${requestedAmount.toFixed(1)}t ${materialType} from External Wholesaler for $${cost.toFixed(0)}`
+    );
 
     // Broadcast concise external purchase update and emit full game state
     WebSocketService.broadcastGameStateUpdate(

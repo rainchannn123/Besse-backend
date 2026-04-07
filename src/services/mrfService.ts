@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { GameState } from '../types';
+import { BrokerService } from './brokerService';
 import { CalculationService } from './calculationService';
 import { GameService } from './gameService';
 import { WebSocketService } from './websocketService';
@@ -92,7 +93,7 @@ export class MRFService {
 
         if (existingAuction) {
           // Material already exists in pending auction - just increase the mass
-          existingAuction.mass += materialData.mass;
+          existingAuction.mass = Math.round((existingAuction.mass + materialData.mass) * 10) / 10;
         } else {
           // Material not found in pending auctions - create new auction
           const auction = {
@@ -129,6 +130,14 @@ export class MRFService {
       GameService.releaseLock(gameState, queueId);
 
       await GameService.updateGameState(sessionId, gameState);
+
+      // Broadcast player action for announcement board
+      WebSocketService.broadcastPlayerAction(
+        sessionId,
+        playerId,
+        'MRF',
+        `processed ${batch.mass.toFixed(1)}t waste → ${materials.length} materials (Refuse: ${refuseMass.toFixed(1)}t, CO₂: +${(processingCO2 + landfillCO2).toFixed(1)}t)`
+      );
 
       // Broadcast real-time update to all players
       WebSocketService.broadcastGameStateUpdate(
@@ -238,6 +247,13 @@ export class MRFService {
         auction.endTime =
           Date.now() + gameState.constants.AUCTION_DURATION_SECONDS * 1000;
 
+        // Schedule immediate resolution when the auction timer expires
+        BrokerService.scheduleAuctionResolution(
+          sessionId,
+          auctionId,
+          gameState.constants.AUCTION_DURATION_SECONDS * 1000
+        );
+
         gameState.activityLog.unshift(
           `[MRF] Listed ${auction.mass.toFixed(1)} tons ${auction.materialType} for auction ` +
             `(Grade ${grade}, Entry price: $${auction.entryPrice.toFixed(0)})`
@@ -255,6 +271,23 @@ export class MRFService {
     GameService.recalculateCoreMetrics(gameState);
 
     await GameService.updateGameState(sessionId, gameState);
+
+    // Broadcast player action for announcement board
+    if (grade === 'F') {
+      WebSocketService.broadcastPlayerAction(
+        sessionId,
+        '',
+        'MRF',
+        `disposed ${auction.mass.toFixed(1)}t Grade F ${auction.materialType} (landfill)`
+      );
+    } else {
+      WebSocketService.broadcastPlayerAction(
+        sessionId,
+        '',
+        'MRF',
+        `listed ${auction.mass.toFixed(1)}t ${auction.materialType} for auction (Grade ${grade}, Price: $${customPrice.toFixed(0)})`
+      );
+    }
 
     // Broadcast update
     WebSocketService.broadcastGameStateUpdate(

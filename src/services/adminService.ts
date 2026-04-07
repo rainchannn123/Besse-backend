@@ -110,7 +110,7 @@ export const getAdminMonitoringOverview = async () => {
       .lean<MonitorUserRecord[]>(),
     Lobby.find({})
       .select(
-        'sessionId lobbyCode leader stage status pairId partnerSessionId teamRole pairStatus players createdAt updatedAt'
+        'sessionId lobbyCode leader gameMode stage status pairId partnerSessionId teamRole pairStatus players createdAt updatedAt'
       )
       .lean<any[]>(),
     GameSession.find({})
@@ -155,6 +155,7 @@ export const getAdminMonitoringOverview = async () => {
         ? WebSocketService.hasActiveConnections(sessionId)
         : false,
       roleInSession: selectedRole,
+      gameMode: lobby?.gameMode || null,
       teamRole: lobby?.teamRole || null,
       isLobbyLeader: Boolean(
         lobby?.leader && String(lobby.leader) === userId
@@ -189,6 +190,7 @@ export const getAdminMonitoringOverview = async () => {
     existing.teams.push({
       sessionId: lobby.sessionId,
       lobbyCode: lobby.lobbyCode,
+      gameMode: lobby.gameMode || 'waste',
       teamRole: lobby.teamRole,
       stage: lobby.stage,
       status: lobby.status,

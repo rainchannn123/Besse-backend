@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import GameSession from '../models/GameSession';
-import Lobby, { ILobby } from '../models/Lobby';
+import Lobby, { GameMode, ILobby } from '../models/Lobby';
 import PairScore from '../models/PairScore';
 import User from '../models/User';
 import { LobbyState } from '../types';
@@ -85,7 +85,7 @@ export class LobbyService {
     });
   }
 
-  static async createLobby(userId: string, userName: string): Promise<ILobby> {
+  static async createLobby(userId: string, userName: string, gameMode: GameMode = 'waste'): Promise<ILobby> {
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const newSessionId = uuidv4();
@@ -95,6 +95,7 @@ export class LobbyService {
       sessionId: newSessionId,
       lobbyCode: newLobbyCode,
       leader: userObjectId,
+      gameMode,
       stage: 'waiting-room',
       players: [
         {
@@ -142,6 +143,7 @@ export class LobbyService {
           sessionId: newSessionId,
           lobbyCode: newLobbyCode,
           leader: userObjectId,
+          gameMode: 'waste',
           stage: 'waiting-room',
           players: [
             {
@@ -337,6 +339,7 @@ export class LobbyService {
       sessionId: lobby.sessionId,
       lobbyCode: lobby.lobbyCode,
       leader: lobby.leader.toString(),
+      gameMode: (lobby as any).gameMode || 'waste',
       stage: lobby.stage,
       players: lobby.players.map(p => ({
         userId: (p.userId as any)._id
@@ -845,6 +848,7 @@ export class LobbyService {
       sessionId: newSessionId,
       lobbyCode: newLobbyCode,
       leader: lobby.leader,
+      gameMode: (lobby as any).gameMode || 'waste',
       stage: 'waiting-room',
       players: [...existingPlayers],
       status: 'ready',

@@ -131,6 +131,14 @@ export class MunicipalityService {
 
       await GameService.updateGameState(sessionId, gameState);
 
+      // Broadcast player action for announcement board
+      WebSocketService.broadcastPlayerAction(
+        sessionId,
+        playerId,
+        'Municipality',
+        `collected ${batch.mass.toFixed(1)}t ${batch.origin} waste (Cost: $${transportCost.toFixed(0)}, CO₂: +${transportCO2.toFixed(1)}t)`
+      );
+
       // Broadcast real-time update to all players
       WebSocketService.broadcastGameStateUpdate(
         sessionId,
@@ -277,6 +285,14 @@ export class MunicipalityService {
       // Save updated game state
       await GameService.updateGameState(sessionId, gameState);
 
+      // Broadcast player action for announcement board
+      WebSocketService.broadcastPlayerAction(
+        sessionId,
+        playerId,
+        'Municipality',
+        `rejected ${batch.mass.toFixed(1)}t ${batch.origin} waste (CO₂: +${landfillCO2.toFixed(1)}t landfill)`
+      );
+
       // Broadcast real-time update to all players
       WebSocketService.broadcastGameState(
         sessionId,
@@ -399,6 +415,16 @@ export class MunicipalityService {
     GameService.recalculateCoreMetrics(gameState);
 
     await GameService.updateGameState(sessionId, gameState);
+
+    // Broadcast player action for announcement board
+    WebSocketService.broadcastPlayerAction(
+      sessionId,
+      playerId,
+      'Municipality',
+      project.completed
+        ? `completed project ${project.name}! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget`
+        : `contributed ${materialAmount.toFixed(1)}t ${materialType} to ${project.name} (Progress: ${project.progress.toFixed(1)}%)`
+    );
 
     // Broadcast
     WebSocketService.broadcastSystemMessage(

@@ -15,8 +15,9 @@ export const createLobby = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user._id;
     const userName = (req as any).user.name;
+    const gameMode = req.body.gameMode || 'waste';
 
-    const lobby = await LobbyService.createLobby(userId, userName);
+    const lobby = await LobbyService.createLobby(userId, userName, gameMode);
 
     sendResponse(res, 200, 'Lobby created successfully', { lobby });
   }

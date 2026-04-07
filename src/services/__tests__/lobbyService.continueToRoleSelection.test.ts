@@ -64,6 +64,7 @@ describe('LobbyService.continueToRoleSelection', () => {
       sessionId: 'session-123',
       lobbyCode: 'ABC123',
       leader: leaderId.toString(),
+      gameMode: 'waste',
       stage: 'role-selection',
       players: [
         {

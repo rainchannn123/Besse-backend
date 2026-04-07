@@ -5,14 +5,15 @@ import { BuyFromExternalWholesalerInput, PlaceBidInput } from '../types';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendResponse } from '../utils/response';
 
-// NEW: Get active auctions from all active games
+// NEW: Get active auctions scoped to the player's pair (own session + partner)
 export const getActiveAuctions = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user._id;
+    const currentSession = (req as any).user.currentSession;
 
-    // Check if user is a broker in any active game
-    const allGameStates = await GameService.getAllActiveGameStates();
-    const isBroker = allGameStates.some(
+    // Get only the sessions belonging to this player's pair
+    const pairedStates = await GameService.getPairedGameStates(userId, currentSession);
+    const isBroker = pairedStates.some(
       gs => gs.players.broker.toString() === userId.toString()
     );
 
@@ -21,7 +22,7 @@ export const getActiveAuctions = asyncHandler(
       return;
     }
 
-    const auctions = await BrokerService.getActiveAuctions();
+    const auctions = BrokerService.getActiveAuctionsFromStates(pairedStates);
 
     sendResponse(res, 200, 'Active auctions retrieved successfully', {
       auctions,
@@ -34,10 +35,11 @@ export const placeBid = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { auctionId }: PlaceBidInput = req.body;
     const userId = (req as any).user._id;
+    const currentSession = (req as any).user.currentSession;
 
-    // Check if user is a broker in any active game
-    const allGameStates = await GameService.getAllActiveGameStates();
-    const isBroker = allGameStates.some(
+    // Get only the sessions belonging to this player's pair
+    const pairedStates = await GameService.getPairedGameStates(userId, currentSession);
+    const isBroker = pairedStates.some(
       gs => gs.players.broker.toString() === userId.toString()
     );
 
@@ -47,7 +49,7 @@ export const placeBid = asyncHandler(
     }
 
     // Find the bidder's session
-    const bidderSession = allGameStates.find(
+    const bidderSession = pairedStates.find(
       gs => gs.players.broker.toString() === userId.toString()
     );
 

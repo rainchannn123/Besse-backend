@@ -51,13 +51,13 @@ export class CalculationService {
         ];
 
       // Input mass for this material type
-      const inputMass = batch.mass * percentage;
+      const inputMass = Math.round(batch.mass * percentage * 10) / 10;
 
       // Output material as per manual: Mass Tons * Composition * Process Rate
-      const outputMass = inputMass * materialProps.processRate;
+      const outputMass = Math.round(inputMass * materialProps.processRate * 10) / 10;
 
       // Waste/Refuse for this material type
-      const wasteMass = inputMass * materialProps.wasteRate;
+      const wasteMass = Math.round(inputMass * materialProps.wasteRate * 10) / 10;
 
       if (outputMass > 0.01) {
         // Only create material if > 0.01 tons
@@ -82,7 +82,7 @@ export class CalculationService {
       (sum, material) => sum + material.mass,
       0
     );
-    const refuseMass = totalInputMass - totalOutputMass;
+    const refuseMass = Math.round((totalInputMass - totalOutputMass) * 10) / 10;
 
     // Dumping fee and landfill CO2 as per manual
     const dumpingFee = refuseMass * constants.DUMPING_FEE;

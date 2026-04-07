@@ -1,10 +1,13 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import { LobbyStage } from '../types';
 
+export type GameMode = 'waste' | 'energy';
+
 export interface ILobby extends Document {
   sessionId: string;
   lobbyCode: string; // 6-character alphanumeric code for joining
   leader: mongoose.Types.ObjectId; // User ID of the lobby leader
+  gameMode: GameMode;
   stage: LobbyStage;
   players: {
     userId: mongoose.Types.ObjectId;
@@ -47,6 +50,11 @@ const lobbySchema = new Schema<ILobby>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    gameMode: {
+      type: String,
+      enum: ['waste', 'energy'],
+      default: 'waste',
     },
     stage: {
       type: String,
