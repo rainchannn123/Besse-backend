@@ -1,5 +1,6 @@
 import { Auction, GameState } from '../types';
 import { GameService } from './gameService';
+import GameSession from '../models/GameSession';
 import { WebSocketService } from './websocketService';
 import { logger } from '../utils/logger';
 
@@ -11,13 +12,14 @@ export class BrokerService {
   private static async findPlayerSession(
     playerId: string
   ): Promise<GameState | null> {
+    const pid = playerId.toString();
     const allGameStates = await GameService.getAllActiveGameStates();
     return (
       allGameStates.find(
         gs =>
-          gs.players.municipality === playerId ||
-          gs.players.mrf === playerId ||
-          gs.players.broker === playerId
+          gs.players.municipality?.toString() === pid ||
+          gs.players.mrf?.toString() === pid ||
+          gs.players.broker?.toString() === pid
       ) || null
     );
   }
@@ -216,23 +218,18 @@ export class BrokerService {
     const previousHighBidder = auction.highBidder;
     const previousHighBidderSessionId = auction.highBidderSessionId;
     auction.currentBid = newBidAmount;
-    auction.highBidder = playerId;
+    auction.highBidder = playerId.toString();
     auction.highBidderSessionId = sessionId; // Store the bidder's sessionId for self-win detection
 
     // Handle active bids: decrement previous high bidder if different
-    if (previousHighBidder && previousHighBidder !== playerId) {
-      const prevBidderSession =
-        await this.findPlayerSession(previousHighBidder);
-      if (
-        prevBidderSession &&
-        prevBidderSession.activeBids[previousHighBidder]
-      ) {
-        prevBidderSession.activeBids[previousHighBidder]--;
-        await GameService.updateGameState(
-          prevBidderSession.sessionId,
-          prevBidderSession
-        );
-      }
+    if (previousHighBidder && previousHighBidder !== playerId && previousHighBidderSessionId) {
+      await GameSession.findOneAndUpdate(
+        {
+          sessionId: previousHighBidderSessionId,
+          [`gameState.activeBids.${previousHighBidder}`]: { $gt: 0 },
+        },
+        { $inc: { [`gameState.activeBids.${previousHighBidder}`]: -1 } }
+      );
     }
 
     // Increment player's active bid counter in bidder's session
@@ -324,32 +321,33 @@ export class BrokerService {
       pairedSessionIds.push(gameState.partnerSessionId);
     }
 
-    const allGameStates: GameState[] = [];
-    for (const sid of pairedSessionIds) {
-      const gs = await GameService.getGameState(sid);
-      if (gs && gs.gameStatus === 'active') allGameStates.push(gs);
-    }
     const now = Date.now();
 
-    for (const gameState of allGameStates) {
-      const expiredAuctions = gameState.marketplaceListing.filter(
+    for (const sid of pairedSessionIds) {
+      // Read fresh from DB each iteration so atomic updates from resolving
+      // the previous session's auctions (e.g. buyer inventory $inc) are
+      // reflected and won't be overwritten by a stale in-memory copy.
+      const currentState = await GameService.getGameState(sid);
+      if (!currentState || currentState.gameStatus !== 'active') continue;
+
+      const expiredAuctions = currentState.marketplaceListing.filter(
         auction => auction.status === 'active' && auction.endTime <= now
       );
 
       for (const auction of expiredAuctions) {
-        await this.resolveAuction(gameState, auction, gameState.sessionId);
+        await this.resolveAuction(currentState, auction, sid);
 
         // Ensure auction status is persisted to 'sold'
-        const auctionIndex = gameState.marketplaceListing.findIndex(
+        const auctionIndex = currentState.marketplaceListing.findIndex(
           a => a.auctionId === auction.auctionId
         );
         if (auctionIndex !== -1) {
-          gameState.marketplaceListing[auctionIndex].status = 'sold';
+          currentState.marketplaceListing[auctionIndex].status = 'sold';
         }
 
         // Broadcast auction resolved event
         WebSocketService.broadcastSystemMessage(
-          gameState.sessionId,
+          sid,
           `Auction for ${auction.mass.toFixed(1)}t ${auction.materialType} has been resolved`,
           'info'
         );
@@ -357,13 +355,13 @@ export class BrokerService {
 
       if (expiredAuctions.length > 0) {
         // IMPORTANT: Persist all changes including inventory updates
-        await GameService.updateGameState(gameState.sessionId, gameState);
+        await GameService.updateGameState(sid, currentState);
 
         // Also emit full game state after auction resolutions
         try {
           await GameService.emitFullGameState(
-            gameState.sessionId,
-            gameState,
+            sid,
+            currentState,
             'auctions-resolved',
             { resolvedCount: expiredAuctions.length }
           );
@@ -430,22 +428,16 @@ export class BrokerService {
         // Explicitly save gameState with updated inventory for self-win
         await GameService.updateGameState(sessionId, gameState);
       } else {
-        // Outcome B: External sale
-        const buyerSession = await this.findPlayerSession(auction.highBidder);
-        if (buyerSession) {
-          // Deduct from buyer's budget
-          buyerSession.budget -= auction.currentBid;
-          // Add to buyer's municipal inventory
-          buyerSession.municipalInventory[auction.materialType] += auction.mass;
-
-          buyerSession.activityLog.unshift(
-            `[Broker] ✅ Acquired ${auction.mass.toFixed(1)}t ${auction.materialType} for $${auction.currentBid.toFixed(0)}. Materials in inventory.`
-          );
-
-          // Record transaction for buyer
-          buyerSession.transactions.push({
+        // Outcome B: External sale — competitor team won
+        // Use atomic MongoDB operations ($inc/$push) for the buyer's session
+        // so concurrent system-check saves or resolveExpiredAuctions iterations
+        // cannot overwrite the inventory/budget change.
+        const buyerSessionId = auction.highBidderSessionId;
+        if (buyerSessionId) {
+          const buyerLogMessage = `[Broker] ✅ Acquired ${auction.mass.toFixed(1)}t ${auction.materialType} for $${auction.currentBid.toFixed(0)}. Materials in inventory.`;
+          const buyerTransaction = {
             id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            turn: buyerSession.currentTurn,
+            turn: gameState.currentTurn,
             buyer: 'MUNI',
             seller: 'MRF',
             itemType: auction.materialType,
@@ -454,41 +446,94 @@ export class BrokerService {
             price: auction.currentBid,
             transactionType: 'external_sale',
             revenue: -auction.currentBid, // Cost to buyer
-          });
+          };
 
-          // Notify buyer
+          // Atomic update — survives concurrent full-document saves
+          await GameSession.findOneAndUpdate(
+            { sessionId: buyerSessionId },
+            {
+              $inc: {
+                [`gameState.municipalInventory.${auction.materialType}`]: auction.mass,
+                'gameState.budget': -auction.currentBid,
+              },
+              $push: {
+                'gameState.activityLog': {
+                  $each: [buyerLogMessage],
+                  $position: 0,
+                },
+                'gameState.transactions': buyerTransaction,
+              },
+            }
+          );
+
+          // Notify buyer team
           WebSocketService.broadcastSystemMessage(
-            buyerSession.sessionId,
+            buyerSessionId,
             `✅ Acquired ${auction.mass.toFixed(1)}t ${auction.materialType} for $${auction.currentBid.toFixed(0)}. Materials in inventory.`,
             'info'
           );
 
-          await GameService.updateGameState(
-            buyerSession.sessionId,
-            buyerSession
+          // Read fresh buyer state for seller log and broadcasting
+          const updatedBuyerState = await GameService.getGameState(buyerSessionId);
+          const buyerTeamRole = updatedBuyerState?.teamRole || 'Unknown';
+
+          gameState.activityLog.unshift(
+            `[Broker] ✅ Sold ${auction.mass.toFixed(1)}t ${auction.materialType} to Team ${buyerTeamRole} for $${auction.currentBid.toFixed(0)}`
           );
+
+          // Record transaction for seller
+          gameState.transactions.push({
+            id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            turn: gameState.currentTurn,
+            buyer: 'MUNI',
+            seller: 'MRF',
+            itemType: auction.materialType,
+            itemId: auction.auctionId,
+            mass: auction.mass,
+            price: auction.currentBid,
+            transactionType: 'external_sale',
+            revenue: auction.currentBid, // Revenue to seller
+          });
+
+          // Seller receives payment
+          gameState.budget += auction.currentBid;
+
+          // Emit updated state to buyer so frontend sees the inventory change
+          if (updatedBuyerState) {
+            try {
+              await GameService.emitFullGameState(
+                buyerSessionId,
+                updatedBuyerState,
+                'auction-won',
+                { auctionId: auction.auctionId }
+              );
+            } catch (err) {
+              // ignore emit errors
+            }
+          }
+        } else {
+          // Buyer session not found — credit the seller like a liquidation
+          logger.warn(`[BrokerService] Buyer session not found for highBidder ${auction.highBidder}, treating as liquidation`);
+          const liquidationPrice = auction.entryPrice * 0.5;
+          gameState.budget += liquidationPrice;
+          gameState.activityLog.unshift(
+            `[Broker] ⚠️ Winning bidder session not found for ${auction.mass.toFixed(1)}t ${auction.materialType}. Sold to system scrappers for $${liquidationPrice.toFixed(0)}`
+          );
+
+          // Record fallback liquidation transaction
+          gameState.transactions.push({
+            id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            turn: gameState.currentTurn,
+            buyer: 'External Market',
+            seller: 'MRF',
+            itemType: auction.materialType,
+            itemId: auction.auctionId,
+            mass: auction.mass,
+            price: liquidationPrice,
+            transactionType: 'external_sale',
+            revenue: liquidationPrice,
+          });
         }
-
-        gameState.activityLog.unshift(
-          `[Broker] ✅ Sold ${auction.mass.toFixed(1)}t ${auction.materialType} to Team ${buyerSession!.teamRole} for $${auction.currentBid.toFixed(0)}`
-        );
-
-        // Record transaction for seller
-        gameState.transactions.push({
-          id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          turn: gameState.currentTurn,
-          buyer: 'MUNI',
-          seller: 'MRF',
-          itemType: auction.materialType,
-          itemId: auction.auctionId,
-          mass: auction.mass,
-          price: auction.currentBid,
-          transactionType: 'external_sale',
-          revenue: auction.currentBid, // Revenue to seller
-        });
-
-        // Seller receives payment
-        gameState.budget += auction.currentBid;
 
         // Mark auction as sold in the marketplace listing
         const auctionIndexSeller = gameState.marketplaceListing.findIndex(
@@ -530,16 +575,15 @@ export class BrokerService {
       });
     }
 
-    // Free bid slot for the bidder
-    if (auction.highBidder) {
-      const bidderSession = await this.findPlayerSession(auction.highBidder);
-      if (bidderSession && bidderSession.activeBids[auction.highBidder]) {
-        bidderSession.activeBids[auction.highBidder]--;
-        await GameService.updateGameState(
-          bidderSession.sessionId,
-          bidderSession
-        );
-      }
+    // Free bid slot for the bidder using atomic decrement
+    if (auction.highBidder && auction.highBidderSessionId) {
+      await GameSession.findOneAndUpdate(
+        {
+          sessionId: auction.highBidderSessionId,
+          [`gameState.activeBids.${auction.highBidder}`]: { $gt: 0 },
+        },
+        { $inc: { [`gameState.activeBids.${auction.highBidder}`]: -1 } }
+      );
     }
 
     // Mark auction as sold

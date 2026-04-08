@@ -929,8 +929,20 @@ export class GameService {
     // Clean up stale locks (older than 30 seconds)
     this.cleanupStaleLocks(gameState);
 
-    // Resolve expired auctions
+    // Save time/cost changes before resolving auctions so concurrent
+    // bid writes to marketplaceListing are not overwritten by a stale copy.
+    await this.updateGameState(sessionId, gameState);
+
+    // Resolve expired auctions (reads fresh state from DB, processes, saves)
     await BrokerService.resolveExpiredAuctions(sessionId);
+
+    // Re-read fresh state so the rest of the system check operates on the
+    // latest data (including any bids placed or auctions resolved above).
+    const freshState = await this.getGameState(sessionId);
+    if (freshState) {
+      gameState.marketplaceListing = freshState.marketplaceListing;
+      gameState.activeBids = freshState.activeBids || {};
+    }
 
     // Timeout safety: If batch locked for more than 10 seconds and still PENDING, remove lock
     gameState.wasteBatches.forEach(batch => {
