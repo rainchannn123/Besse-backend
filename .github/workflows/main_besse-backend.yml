@@ -28,9 +28,6 @@ jobs:
           npm install
           npm run build --if-present
           npm run test --if-present
-          
-      - name: Build Next.js app
-        run: npm run build
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -55,4 +52,4 @@ jobs:
           app-name: 'besse-backend'
           slot-name: 'Production'
           package: .
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_631B5800964D4B1295ECF8ECB302AC5B }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_C212BF34FAF34BC0A58490FA0B6CCE77 }}
