@@ -6,7 +6,8 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
-  role: 'player' | 'admin';
+  accountType: 'student' | 'educator' | 'spectator' | 'admin';  // NEW - permanent
+  role: 'municipality' | 'mrf' | 'broker' | null;  // EXISTING - temporary game role
   currentSession: string | null;
   comparePassword(candidatePassword: string): Promise<boolean>;
   createdAt: Date;

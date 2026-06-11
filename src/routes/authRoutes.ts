@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getProfile, login, register } from '../controllers/authController';
+import { getProfile, login, register, updateUserRole } from '../controllers/authController';
 import { protect } from '../middleware/auth';
 import { loginSchema, registerSchema } from '../types';
 import { validate } from '../utils/validation';
@@ -19,13 +19,13 @@ const router = Router();
  *           schema:
  *             type: object
  *             required:
- *               - username
+ *               - name
  *               - email
  *               - password
  *             properties:
- *               username:
+ *               name:
  *                 type: string
- *                 example: johndoe
+ *                 example: John Doe
  *               email:
  *                 type: string
  *                 format: email
@@ -35,30 +35,18 @@ const router = Router();
  *                 format: password
  *                 minLength: 6
  *                 example: password123
+ *               accountType:
+ *                 type: string
+ *                 enum: [student, educator, spectator, admin]
+ *                 default: student
+ *                 description: Permanent account type (who the user is)
  *     responses:
  *       201:
  *         description: User registered successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: User registered successfully
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/User'
  *       400:
- *         $ref: '#/components/responses/BadRequest'
+ *         description: Invalid input
  *       409:
  *         description: User already exists
- *         $ref: '#/components/responses/Conflict'
  */
 router.post('/register', validate(registerSchema), register);
 
@@ -89,30 +77,8 @@ router.post('/register', validate(registerSchema), register);
  *     responses:
  *       200:
  *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Login successful
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/User'
- *                     token:
- *                       type: string
- *                       example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *       400:
- *         $ref: '#/components/responses/BadRequest'
  *       401:
  *         description: Invalid credentials
- *         $ref: '#/components/responses/Unauthorized'
  */
 router.post('/login', validate(loginSchema), login);
 
@@ -127,28 +93,42 @@ router.post('/login', validate(loginSchema), login);
  *     responses:
  *       200:
  *         description: Profile retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Profile retrieved successfully
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/User'
  *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       404:
- *         description: User not found
- *         $ref: '#/components/responses/NotFound'
+ *         description: Not authorized
  */
 router.get('/profile', protect, getProfile);
+
+/**
+ * @swagger
+ * /api/auth/update-role:
+ *   put:
+ *     summary: Update user's game role (Municipality/MRF/Broker)
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [municipality, mrf, broker]
+ *                 description: The game role to assign to the user
+ *     responses:
+ *       200:
+ *         description: User role updated successfully
+ *       400:
+ *         description: Invalid role
+ *       401:
+ *         description: Not authorized
+ *       404:
+ *         description: User not found
+ */
+router.put('/update-role', protect, updateUserRole);
 
 export default router;

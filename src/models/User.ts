@@ -27,10 +27,17 @@ const userSchema = new Schema<IUser>(
       minlength: [6, 'Password must be at least 6 characters'],
       select: false,
     },
+    // PERMANENT account type - who the user is
+    accountType: {
+      type: String,
+      enum: ['student', 'educator', 'spectator', 'admin'],
+      default: 'student',
+    },
+    // TEMPORARY game role - what they play in current game
     role: {
       type: String,
-      enum: ['player', 'admin'],
-      default: 'player',
+      enum: ['municipality', 'mrf', 'broker', null],
+      default: null,
     },
     currentSession: {
       type: String,

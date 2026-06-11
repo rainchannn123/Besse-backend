@@ -21,6 +21,7 @@ interface MonitorUserRecord {
   name: string;
   email: string;
   role: string;
+  accountType: string;  // ← ADDED THIS
   currentSession: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -105,7 +106,8 @@ export const adminLogin = async (username: string, password: string) => {
 
 export const getAdminMonitoringOverview = async () => {
   const [users, lobbies, gameSessions] = await Promise.all([
-    User.find({}, 'name email role currentSession createdAt updatedAt')
+    // UPDATED: Added accountType to the query
+    User.find({}, 'name email role accountType currentSession createdAt updatedAt')
       .sort({ createdAt: -1 })
       .lean<MonitorUserRecord[]>(),
     Lobby.find({})
@@ -149,6 +151,7 @@ export const getAdminMonitoringOverview = async () => {
       name: user.name,
       email: user.email,
       accountRole: user.role,
+      accountType: (user as any).accountType || 'student',  // ← ADDED THIS
       currentSession: sessionId,
       status: derivePlayerStatus(user, lobbyBySession, gameBySession),
       hasActiveSocketConnections: sessionId
