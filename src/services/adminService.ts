@@ -275,6 +275,7 @@ export const forceExitPlayer = async (userId: string, reason?: string) => {
   }
 
   user.currentSession = null;
+  user.role = null;
   await user.save();
 
   return {
