@@ -5,20 +5,21 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { sendResponse } from '../utils/response';
 import { chatbotService } from '../services/chatbotService';
 
-function chunkText(text: string, maxLen = 1000): string[] {
+function chunkText(text: string, maxLen = 600, overlap = 100): string[] {
   const paragraphs = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
   const out: string[] = [];
   for (const p of paragraphs) {
     if (p.length <= maxLen) out.push(p);
     else {
       let i = 0;
+      const step = Math.max(1, maxLen - overlap);
       while (i < p.length) {
         const part = p.slice(i, i + maxLen);
         // try to cut at a sentence boundary
         const lastPeriod = part.lastIndexOf('. ');
         const cut = (lastPeriod > Math.floor(maxLen * 0.5)) ? lastPeriod + 1 : part.length;
         out.push(p.slice(i, i + cut).trim());
-        i += cut;
+        i += Math.max(step, cut - overlap);
       }
     }
   }
@@ -33,8 +34,8 @@ export const ingestDocs = asyncHandler(async (_req: Request, res: Response) => {
   }
 
   const text = fs.readFileSync(docsPath, 'utf8');
-  const chunks = chunkText(text, 1000);
-  const docs = chunks.map((c, i) => ({ id: `doc-${i}`, text: c, metadata: { source: docsPath, chunk_index: i } }));
+  const chunks = chunkText(text, 600, 100);
+  const docs = chunks.map((c, i) => ({ id: `doc-${i}`, text: c, metadata: { chunk_index: i } }));
 
   // Persist to vectorstore folder inside backend
   try {
