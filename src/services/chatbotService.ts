@@ -10,6 +10,23 @@ import { chatbotVectorstoreService } from './chatbotVectorstoreService';
 class ChatbotService {
   private readonly provider = env.CHATBOT_PROVIDER;
 
+  private containsCjk(text: string): boolean {
+    // CJK Unified Ideographs + Extensions + Compatibility Ideographs
+    return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(text);
+  }
+
+  private isLikelyEnglish(text: string): boolean {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return true;
+
+    // Basic heuristic: detect presence of Latin letters and ratio dominance.
+    const latinChars = (cleaned.match(/[A-Za-z]/g) || []).length;
+    const letters = (cleaned.match(/\p{L}/gu) || []).length;
+
+    if (letters === 0) return true;
+    return latinChars / letters >= 0.6;
+  }
+
   async ask(body: ChatbotRequestBody): Promise<ChatbotResponseData> {
     if (!env.CHATBOT_ENABLED) {
       throw new AppError('Chatbot is disabled', 503);
@@ -18,6 +35,21 @@ class ChatbotService {
     const message = body.message?.trim();
     if (!message) {
       throw new AppError('Message is required', 400);
+    }
+
+    // Hard block for Chinese/CJK characters
+    if (this.containsCjk(message)) {
+      return {
+        reply: 'This chat only support English conversation. Please ask again in English.',
+        contextUsed: [],
+      };
+    }
+
+    if (!this.isLikelyEnglish(message)) {
+      return {
+        reply: 'This chat only support English conversation. Please ask again in English.',
+        contextUsed: [],
+      };
     }
 
     const contextChunks = chatbotVectorstoreService.retrieve(message, 4);
@@ -76,7 +108,7 @@ class ChatbotService {
         },
         body: JSON.stringify({
           model: env.CHATBOT_MODEL,
-          temperature: 0.4,
+          temperature: 0.3,
           messages: [
             {
               role: 'system',
