@@ -31,6 +31,7 @@ Declares HTTP route endpoints and middleware/controller wiring by domain.
 - Keep routes declarative; avoid logic beyond middleware composition.
 - Apply middleware consistently for protected resources.
 - Use feature-local controller handlers for clarity.
+- Chatbot endpoints are added as a dedicated route file `chatbotRoutes.ts` with minimal request processing.
 
 ## Typical Change Flows
 - Add endpoint:
@@ -38,6 +39,7 @@ Declares HTTP route endpoints and middleware/controller wiring by domain.
   2. Implement controller handler.
   3. Implement service logic.
   4. Update Swagger docs if applicable.
+  5. If adding a new assistant feature, add a route under `chatbotRoutes.ts` and keep the contract small.
 
 ## Risks
 - Missing middleware can create security gaps.

@@ -1,0 +1,274 @@
+[
+  {
+    "id": "doc-0",
+    "text": "Clash of the Cities - Mission Net Zero - Comprehensive Documentation\r\n\r\nOverview:\r\nClash of the Cities - Mission Net Zero is a real-time, multiplayer cooperative simulation game focused on urban waste management and the circular economy. Players assume one of three specialized roles (MRF, Broker, Municipality) and collaborate in timed game sessions to balance competing objectives: Budget ($), City Health (%), and CO₂ Emissions. The system is designed for both educational and training purposes and is implemented as a web application with a TypeScript/Node.js backend and a Next.js frontend.\r\n\r\nRoles and Responsibilities:\r\n- MRF (Materials Recovery Facility):\r\n  - Collects incoming waste batches, grades materials, and prepares materials for sale.\r\n  - Interacts with local queues, processes waste into reusable materials, and manages internal inventory.\r\n  - Key pages: `/dashboard/mrf-collection`.\r\n\r\n- Broker:\r\n  - Manages auctions, places bids, and interacts with external wholesalers to bu",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 0
+    }
+  },
+  {
+    "id": "doc-1",
+    "text": "y/sell materials.\r\n  - Responsible for optimizing revenue while supporting overall team objectives.\r\n  - Key pages: `/dashboard/broker-inventory`.\r\n\r\n- Municipality:\r\n  - Oversees waste collection, city projects, and public health considerations.\r\n  - Allocates resources to city projects, collects waste from citizens, and interfaces with MRF for transfers.\r\n  - Key pages: `/dashboard/municipality`.\r\n\r\nCore Game Concepts:\r\n- Game Session: An instance of a running game identified by `sessionId`. Sessions contain the authoritative `gameState`, which is broadcast to connected clients via WebSockets.\r\n- Game State: Central JSON object tracking players, budgets, city health, CO₂, waste batches, inventories, auctions, and turn timing.\r\n- Queue: Waiting list of waste batches to be processed by MRF or transferred between roles.\r\n- Waste Batch: An object representing a collected waste payload with metadata such as `id`, `mass`, `quality`, `status`.\r\n- Inventory & Auctions: Materials produced by",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 1
+    }
+  },
+  {
+    "id": "doc-2",
+    "text": "MRF can be listed in auctions. Brokers interact with auctions and external wholesalers to fulfill demands.\r\n- Countdown & Turns: Real-time or simulated timing controls govern the session duration and turn transitions. Countdown events are broadcast in real-time.\r\n\r\nFrontend Architecture (Next.js):\r\n- `app/` contains top-level routes and nested layouts.\r\n- `app/dashboard/` houses key gameplay pages including `mrf-collection`, `broker-inventory`, and `municipality`.\r\n- `components/ui/` contains reusable UI elements such as `ShiftLog`, `selectedBox` widgets, and new `GameChatbot` component for in-play assistance.\r\n- `services/` provides API wrappers to the backend endpoints (e.g., `gameService`, `mrfService`, `brokerService`, `municipalityService`).\r\n- `stores/` (Zustand) handles auth and notification state (e.g., `authStore`, `notificationStore`).\r\n- `hooks/` contains specialized hooks such as `useWebSocket` for realtime interactions.\r\n\r\nBackend Architecture (Express + TypeScript):\r\n- `s",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 2
+    }
+  },
+  {
+    "id": "doc-3",
+    "text": "rc/app.ts` boots the server, registers middleware, routes, WebSocket setup, and background schedulers (system checks, pairing, countdown broadcasting).\r\n- `routes/` map endpoints to `controllers/`. New assistant endpoints are under `routes/chatbotRoutes.ts`.\r\n- `controllers/` are lightweight adapters that validate and forward requests to `services/`.\r\n- `services/` contain the business logic (e.g., `gameService`, `mrfService`, `brokerService`). The new `chatbotService` handles conversational logic and retrieval.\r\n- `utils/` contains helpers: `AppError`, `asyncHandler`, `response` helpers.\r\n- `models/` define persisted entities (Mongoose) such as `GameSession`, `User`, `Lobby`.\r\n\r\nReal-time Communication:\r\n- The backend uses `socket.io` with an initialized `WebSocketService` to broadcast game state updates, countdowns, system messages, and player actions.\r\n- Clients subscribe to various events such as `game-state-update`, `game-state-full`, `system-message`, and `player-action`.\r\n\r\nAPIs",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 3
+    }
+  },
+  {
+    "id": "doc-4",
+    "text": ":\r\n- Game state: `/api/games/...`\r\n- MRF endpoints: `/api/mrf/...`\r\n- Broker endpoints: `/api/broker/...`\r\n- Municipality endpoints: `/api/municipality/...`\r\n- Auth & Lobby management: `/api/auth`, `/api/lobby`\r\n- Chatbot endpoints (new):\r\n  - `POST /api/chatbot/message` - send user message, returns assistant reply and optionally context used.\r\n  - `GET /api/chatbot/status` - returns vectorstore document count/status.\r\n\r\nChatbot & RAG Integration:\r\n- A lightweight in-memory vectorstore scaffold (`chatbotVectorstoreService`) stores documents for retrieval.\r\n- `chatbotService` performs retrieval (currently token-overlap heuristic) and, if `OPENAI_API_KEY` is provided, calls the LLM provider (default `openai`) to generate an answer using retrieved context.\r\n- The recommended production flow uses a persistent vector database (Chroma, Pinecone, pgvector) with embeddings.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 4
+    }
+  },
+  {
+    "id": "doc-5",
+    "text": "A helper Python script is provided to build a Chroma vectorstore from the game documentation.\r\n- The chatbot is exposed only in gameplay pages (`mrf-collection`, `broker-inventory`, `municipality`) as a floating UI widget that expands to a chat window.\r\n\r\nData Flow for Chatbot (Simple):\r\n1. Frontend `GameChatbot` sends `POST /api/chatbot/message` with message + optional sessionId/pageContext/history.\r\n2. Backend `chatbotController` validates payload and calls `chatbotService.ask()`.\r\n3. `chatbotService` retrieves candidate context chunks from the in-memory vectorstore, then either:\r\n   - Calls OpenAI Chat Completions (if API key set) with system prompt + retrieved context, or\r\n   - Returns a graceful fallback answer referencing retrieved local context.\r\n4.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 5
+    }
+  },
+  {
+    "id": "doc-6",
+    "text": "Controller returns standardized API response to client.\r\n\r\nExtensibility Notes:\r\n- To improve retrieval accuracy, replace the in-memory `chatbotVectorstoreService` with a persistent embedding-backed vector DB (Chroma, Pinecone, etc.).\r\n- Add scripts to periodically ingest new game content, policy docs, or FAQs into the vectorstore.\r\n- Add rate limits and per-session quotas for the chatbot endpoint to protect API costs.\r\n\r\nOperational & Deployment Notes:\r\n- Environment variables are validated via Zod in `src/config/env.ts`.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 6
+    }
+  },
+  {
+    "id": "doc-7",
+    "text": "Add `OPENAI_API_KEY`, `CHATBOT_MODEL`, and related configs there in production.\r\n- The backend exposes health checks at `/` and `/api/health`.\r\n- Background jobs run via `setInterval` inside `app.ts` for scheduled checks and pairing; consider migrating to a job scheduler for scaling.\r\n\r\nDevelopment & Local Run:\r\n- Backend: `npm install` then `npm run dev` from `Besse-backend`.\r\n- Frontend: `npm install` then `npm run dev` from `Besse-frontend`.\r\n- To enable the chatbot with local docs, run the provided generator to produce `Generation/chroma_docs.json`, then restart backend which auto-loads this file into the in-memory vectorstore.\r\n\r\nMaintenance Suggestions:\r\n- Add automated ingestion pipelines for game rules and help docs so the vectorstore remains up-to-date.\r\n- Periodically re-run the Chroma builder if you want an on-disk vector index for faster retrieval and more advanced RAG.\r\n\r\nContact & Contributing:\r\n- Follow existing `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` to make edits.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 7
+    }
+  },
+  {
+    "id": "doc-8",
+    "text": "- Document significant behavioral changes in `UPDATED_THINGS.md` or `V3_UPDATED_THINGS.md`.\r\n\r\n---\r\n\r\n## Circular Economy Fundamentals & Sustainability Framework\r\n\r\n### What is the Circular Economy?\r\n\r\nThe circular economy is an economic system designed to eliminate waste and continuously use resources through recovery, regeneration, and restoration. Unlike the traditional linear \"take-make-dispose\" model, the circular economy operates on a cyclical principle where materials are recovered and reintroduced into production cycles, dramatically reducing resource extraction and environmental impact.\r\n\r\nThe circular economy model replaces the linear economy's fundamental flaw: depletion of finite natural resources. In a circular system, products are designed for longevity, repairability, and recyclability from the outset.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 8
+    }
+  },
+  {
+    "id": "doc-9",
+    "text": "This principle applies directly to the waste management value chain in Clash of the Cities - Mission Net Zero, where players manage material flows through collection, sorting, processing, and reintroduction into markets or production loops.\r\n\r\nKey circular economy tenets include:\r\n1. **Design for Circularity**: Products engineered from inception with end-of-life recovery in mind. Materials are selected for recyclability and reusability potential.\r\n2. **Material Loops**: Closed-loop systems where materials cycle repeatedly. Biological loops return organic matter safely to ecosystems; technical loops maintain industrial materials at high value indefinitely.\r\n3. **Extended Producer Responsibility (EPR)**: Manufacturers bear responsibility for products throughout their lifecycle, incentivizing sustainable design.\r\n4.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 9
+    }
+  },
+  {
+    "id": "doc-10",
+    "text": "**Service Over Ownership**: Business models transition from selling goods to selling services (e.g., \"material as a service\"), decoupling profit from material consumption.\r\n5. **Waste as a Resource**: No true waste exists; byproducts become inputs for other processes or industries.\r\n\r\nThe game directly models these principles: MRFs recover value from waste streams, brokers facilitate material redistribution and secondary market access, and municipalities balance collection infrastructure with city development—all while minimizing CO₂ emissions inherent in the system.\r\n\r\n### Environmental Engineering & Waste Management Systems\r\n\r\nWaste management systems are foundational infrastructure for urban sustainability. Modern environmental engineering approaches waste holistically, integrating collection logistics, treatment technologies, contamination control, and emissions reduction.\r\n\r\n**Collection Phase:**\r\nMunicipality players manage waste collection efficiency.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 10
+    }
+  },
+  {
+    "id": "doc-11",
+    "text": "Optimal collection routes minimize fuel consumption and operational CO₂. Collection frequency impacts landfill diversion—higher frequency reduces contamination and loss of recoverable materials. Trade-offs exist: more frequent collection increases vehicle emissions; infrequent collection increases contamination and landfill burden.\r\n\r\n**Sorting and Materials Recovery:**\r\nMRF operators employ mechanical and manual sorting to separate incoming mixed waste streams into homogeneous material categories (paper, cardboard, metals, plastics, glass). Advanced MRFs use optical scanners, magnetometers, and eddy-current separators for precision. Contamination—food waste, hazardous materials, non-recyclables mixed in—degrades material quality and downstream value, reducing broker demand and economic incentive.\r\n\r\nHigh-grade materials command premium pricing. Clean aluminum, for instance, can cycle indefinitely without property degradation and is infinitely recyclable.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 11
+    }
+  },
+  {
+    "id": "doc-12",
+    "text": "Plastics degrade incrementally with each cycle (downcycling), necessitating careful classification by polymer type (PET, HDPE, PVC, LDPE, PP, PS, Other).\r\n\r\n**Processing & Secondary Markets:**\r\nProcessed materials are aggregated by brokers and sold to end-markets: manufacturers seeking recycled input (reducing virgin material extraction), retailers, and wholesalers. Broker inventory management balances holding costs against market price fluctuations—selling too early leaves upside unrealized; holding too long incurs storage and opportunity costs.\r\n\r\n**Transportation & Logistics Emissions:**\r\nEvery material transfer incurs transportation CO₂. Moving waste from collection points to MRF, then processed materials to brokers or end-markets, generates cumulative emissions.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 12
+    }
+  },
+  {
+    "id": "doc-13",
+    "text": "Game mechanics model this: longer supply chains or inefficient logistics increase total system emissions, pressuring players to optimize transport and reduce idle inventory.\r\n\r\n### Carbon Footprint & Lifecycle Emissions in Waste Systems\r\n\r\nA material's carbon footprint encompasses greenhouse gas (GHG) emissions across its entire lifecycle: raw material extraction, processing, manufacturing, transportation, use, and end-of-life (EOL) treatment. Waste management systems directly influence the EOL phase and determine whether materials re-enter production (low-carbon pathway) or are landfilled/incinerated (high-carbon alternative).\r\n\r\n**Landfill & Incineration Emissions:**\r\nWhen organic waste (food, yard debris, paper) enters landfills anaerobically, microbes produce methane (CH₄), a potent GHG with ~28–36 times the global warming potential of CO₂ over a 100-year period. A single decomposing apple or discarded cardboard box in a landfill generates methane for decades.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 13
+    }
+  },
+  {
+    "id": "doc-14",
+    "text": "Incineration burns waste for energy recovery but produces direct CO₂ emissions and incomplete combustion byproducts.\r\n\r\n**Recycling Carbon Benefit:**\r\nRecycling dramatically lowers lifecycle emissions by:\r\n- Eliminating virgin resource extraction (mining, forestry, petroleum drilling) and its associated emissions.\r\n- Reducing processing energy; recycled aluminum requires ~95% less energy than primary aluminum smelting.\r\n- Avoiding landfill methane production.\r\n- Displacing future virgin material production.\r\n\r\nExample: One recycled aluminum can avoids ~9g CO₂e vs. primary production. Recycled steel saves ~2.5 kg CO₂e per ton vs.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 14
+    }
+  },
+  {
+    "id": "doc-15",
+    "text": "virgin ore processing.\r\n\r\n**Transportation Carbon Intensity:**\r\nTransport mode defines carbon efficiency:\r\n- Truck: ~0.1–0.2 kg CO₂ per ton-km.\r\n- Rail: ~0.025 kg CO₂ per ton-km (4–8x lower).\r\n- Ship: ~0.01 kg CO₂ per ton-km (10–20x lower).\r\n\r\nGame mechanics reflect this: inefficient local collection increases per-unit emissions; aggregating materials for rail or ship transport reduces carbon per ton transferred. Brokers that consolidate shipments and use efficient logistics reduce total system emissions and win favor with municipality partners.\r\n\r\n**System-Level Carbon Intensity:**\r\nThe waste system's overall carbon footprint is the sum of:\r\n1. Collection logistics emissions.\r\n2. MRF operational energy (sorting machinery, facility lighting, HVAC).\r\n3. Processing energy (shredding, compaction, baling).\r\n4. Transportation between actors.\r\n5. Avoided landfill/incineration emissions (credited as a benefit).\r\n6.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 15
+    }
+  },
+  {
+    "id": "doc-16",
+    "text": "Minus recyclable material revenues offsetting operational costs.\r\n\r\nPlayers optimize this integrated system. A municipality that collects efficiently reduces collection emissions. An MRF that sorts with high purity enables higher broker revenues and market demand, justifying continued operation. A broker that aggregates and batches shipments reduces per-unit transport emissions. Together, the team's mission is to maximize material recovery and minimize net system emissions while generating revenue for reinvestment and city development.\r\n\r\n### The Municipality's Role in Circular Economy Leadership\r\n\r\nMunicipalities are the orchestrators of circular systems. They control or regulate waste collection infrastructure, set policy frameworks, and manage citizen/business incentives. In Clash of the Cities - Mission Net Zero, the Municipality player is central to system success.\r\n\r\n**Waste Collection & Infrastructure:**\r\nMunicipalities operate or contract collection services.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 16
+    }
+  },
+  {
+    "id": "doc-17",
+    "text": "Decisions include:\r\n- **Collection frequency**: Daily pickup reduces contamination and landfill overflow but increases vehicle emissions. Bi-weekly or tri-weekly pickup is standard in developed economies. Trade-off: balance citizen satisfaction and contamination control.\r\n- **Separate collection**: Comingled (single-bin) collection simplifies logistics but increases MRF contamination and sorting cost. Separate collection (paper, organics, metals, plastics in distinct streams) improves material purity and market value but raises collection costs (multiple vehicle routes, citizen compliance).\r\n- **Organic waste management**: Food and yard waste can be composted anaerobically (biogas production) or aerobically (compost product) rather than landfilled.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 17
+    }
+  },
+  {
+    "id": "doc-18",
+    "text": "This eliminates methane emissions and produces valuable soil amendments or renewable energy.\r\n- **Hazardous waste streams**: Proper handling of batteries, e-waste, bulky items, and toxic materials prevents environmental contamination and enables specialized recycling.\r\n\r\n**City Projects & Public Health:**\r\nCity projects funded by waste management budget represent sustainability investments:\r\n- **Green infrastructure**: Parks, urban forests, and green roofs increase carbon sequestration, reduce urban heat island effects, and improve air quality (lowering respiratory disease).\r\n- **Clean energy transition**: Solar/wind installations reduce grid emissions.\r\n- **Water management**: Stormwater retention and treatment prevent pollution.\r\n- **Education & engagement**: Campaigns promoting source separation and reduction increase citizen participation and system efficiency.\r\n\r\nHigh city health (%) reflects successful municipal management: lower waste generation per capita, higher material reco",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 18
+    }
+  },
+  {
+    "id": "doc-19",
+    "text": "very rates, cleaner air/water, and public satisfaction.\r\n\r\n**Policy & Market Development:**\r\nMunicipalities set conditions for circular economy success:\r\n- **EPR policies**: Producer responsibility schemes encourage manufacturers to design for recyclability.\r\n- **Procurement standards**: Preferentially buying recycled-content or circular-design products creates stable end-market demand.\r\n- **Landfill diversion targets**: Legal mandates (e.g., \"70% diversion by 2030\") force system optimization.\r\n- **Economic instruments**: Taxes on virgin materials, subsidies for recycled products, or deposit-return schemes alter market incentives.\r\n\r\nIn the game, Municipality actions directly influence MRF demand and broker market stability. Strategic municipal policy amplifies the entire circular ecosystem.\r\n\r\n---\r\n\r\n### The MRF's Role in Material Recovery & Waste Processing\r\n\r\nMaterials Recovery Facilities are the industrial backbone of circular economies.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 19
+    }
+  },
+  {
+    "id": "doc-20",
+    "text": "MRFs are sorting and processing plants that convert mixed waste streams into sortable, marketable material fractions. MRF operational excellence directly determines system recovery rates and material quality.\r\n\r\n**MRF Sorting & Grading Processes:**\r\n\r\nMixed waste arrives at the MRF in waste batches (bags, containers, compacted trucks). The sorting process uses a combination of manual and mechanical techniques:\r\n\r\n1. **Manual Sorting**: Workers remove contaminants and non-recyclables by hand on a conveyor belt. This labor-intensive step is critical for quality; a single food-stained plastic bag or piece of glass can contaminate an entire batch destined for plastic reprocessors.\r\n\r\n2.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 20
+    }
+  },
+  {
+    "id": "doc-21",
+    "text": "**Mechanical Separation**:\r\n   - **Screens**: Separate material by size (e.g., remove small non-recyclables, split fiber from rigid plastics).\r\n   - **Magnets**: Extract ferrous metals (steel cans, appliances).\r\n   - **Eddy-current separators**: Extract non-ferrous metals (aluminum, brass, copper).\r\n   - **Optical/Near-infrared scanners**: Identify plastic types (PET, HDPE, etc.) and enable targeted ejection or routing.\r\n   - **Air classification**: Separate light materials (film, paper) from dense materials (metals, glass).\r\n\r\n3. **Baling & Compaction**: Sorted materials are densified into bales (paper, cardboard, metals) for efficient transport.\r\n\r\n4. **Quality Grading**: Materials are graded by purity (%-acceptable) and contamination level.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 21
+    }
+  },
+  {
+    "id": "doc-22",
+    "text": "High-grade materials attract premium broker pricing.\r\n\r\n**MRF Economics & Operational Costs:**\r\n\r\nMRF profitability depends on:\r\n- **Tipping fees**: Revenue from municipalities/waste generators paying to dispose at the facility.\r\n- **Material sales**: Revenue from selling sorted fractions to brokers and end-markets.\r\n- **Operational costs**: Labor, utilities, equipment maintenance, equipment wear.\r\n- **Market volatility**: Commodity prices for aluminum, steel, paper, plastic fluctuate daily on global exchanges, impacting revenue.\r\n\r\nA well-run MRF generates sufficient material sale revenue to offset tipping fees and costs, sometimes even paying municipalities a \"negative tipping fee\" (subsidy). A poorly-run MRF (high contamination, low labor efficiency, equipment downtime) runs at a loss and may close, forcing waste back into landfills.\r\n\r\nIn the game, MRF players manage incoming batch quality, grading accuracy, and processing speed.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 22
+    }
+  },
+  {
+    "id": "doc-23",
+    "text": "High-quality output attracts broker interest and premium pricing. Low-quality output (contaminated materials) depresses broker demand and drives prices down.\r\n\r\n**Environmental Impact of MRF Operations:**\r\n\r\nMRF operations generate emissions:\r\n- **Facility energy**: Sorting machinery, lighting, HVAC, and compressed air systems consume electricity (carbon-intensive if from fossil-fuel grids).\r\n- **Labor transportation**: Worker commuting emissions (mitigated by transit access and remote work options).\r\n- **Equipment emissions**: Diesel-powered balers and loaders.\r\n\r\nHowever, MRF operations avoid far greater emissions from landfill decomposition and virgin material extraction.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 23
+    }
+  },
+  {
+    "id": "doc-24",
+    "text": "Net lifecycle comparison shows recycling-focused MRFs as carbon-negative investments despite operational emissions.\r\n\r\n**MRF Role in the Circular Value Chain:**\r\n\r\nThe MRF sits at a critical juncture: it converts low-value mixed waste (negative value to generators) into medium-value sorted fractions (positive value to brokers and manufacturers). This value creation is the economic engine motivating waste diversion. Without functioning MRFs, circular systems collapse—waste defaults to landfills, and virgin resource extraction accelerates.\r\n\r\n---\r\n\r\n### The Broker's Role in Circular Market Development\r\n\r\nBrokers are intermediaries connecting supply (MRF-processed materials) to demand (manufacturers, retailers, secondary markets, wholesalers). They manage inventory, price discovery, market development, and risk.\r\n\r\n**Broker Functions in Circular Supply Chains:**\r\n\r\n1.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 24
+    }
+  },
+  {
+    "id": "doc-25",
+    "text": "**Aggregation**: Brokers accumulate material batches from multiple MRFs into larger, homogeneous lots attractive to bulk buyers. A single MRF's 5-ton steel shipment may not justify buyer logistics; 50 tons from aggregated sources does.\r\n\r\n2. **Quality Assurance**: Brokers inspect, test, and certify material quality, providing end-buyers confidence in specs and consistency.\r\n\r\n3. **Market Linkage**: Brokers develop relationships with end-buyers (secondary plastic processors, steel mills, paper mills, wholesalers). They provide market intelligence on pricing, demand forecasts, and supply gaps.\r\n\r\n4. **Risk Management**: Brokers manage price volatility through forward contracting, hedging, and strategic inventory positioning. Holding inventory carries risk—prices may fall, requiring discounted sales; or prices may rise, enabling capital gains.\r\n\r\n5. **Logistics Coordination**: Brokers arrange transportation, typically negotiating volume discounts with carriers and optimizing routes.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 25
+    }
+  },
+  {
+    "id": "doc-26",
+    "text": "Efficient logistics reduce per-unit transport costs and emissions.\r\n\r\n**Broker Economics & Market Dynamics:**\r\n\r\nBroker profit margin = sell price – buy cost – operational costs (labor, facility, transport, insurance).\r\n\r\nMargins vary by material and market condition:\r\n- **Aluminum**: High-value, stable demand, narrow margins (0.5–2% per transaction) due to high competition.\r\n- **Mixed plastics**: Volatile pricing, contamination risk, wider margins (2–5%) compensate for risk.\r\n- **Cardboard**: Commodity-like, predictable demand, tight margins (0.5–1.5%).\r\n\r\nBrokers succeed by:\r\n- **Accurate price discovery**: Knowing fair market prices and negotiating optimal buy/sell prices.\r\n- **Demand creation**: Developing end-buyer relationships and identifying niche markets (e.g., specialty recyclers for rare materials).\r\n- **Inventory management**: Balancing holding costs against upside price movements.\r\n- **Logistics efficiency**: Consolidating shipments, using lower-cost transport modes, and",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 26
+    }
+  },
+  {
+    "id": "doc-27",
+    "text": "minimizing dead-leg miles.\r\n\r\n**Broker Impact on System Circularity:**\r\n\r\nBrokers stabilize the circular loop by:\r\n- **Creating incentive for MRF output**: High broker demand and fair pricing motivate MRF investment and operational excellence.\r\n- **Enabling end-market access**: Without brokers linking to distant manufacturers and processors, local MRFs have limited markets and may not survive economically.\r\n- **Market transparency**: Competitive brokering prevents monopoly exploitation and ensures fair prices along the chain.\r\n- **Innovation**: Brokers pioneering new end-markets (e.g., plastic-to-fuel conversion, chemical recycling) expand the scope of circular recovery.\r\n\r\nA municipality's waste system thrives when brokers are profitable and competitive, incentivizing high-quality material demand and driving MRF performance.\r\n\r\n**Broker Carbon Footprint Optimization:**\r\n\r\nBrokers minimize logistics emissions by:\r\n- **Consolidation**: Aggregating smaller shipments into full-truck-load",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 27
+    }
+  },
+  {
+    "id": "doc-28",
+    "text": "(FTL) or container-load (CL) quantities, reducing per-unit transport emissions.\r\n- **Mode shifting**: Routing rail or maritime shipments instead of truck-only when supply chain permits.\r\n- **Regional sourcing**: Developing networks of local MRFs and buyers to reduce average transport distance.\r\n- **Reverse logistics**: Arranging backhaul loads to reduce empty vehicle miles.\r\n\r\nA strategic broker that optimizes logistics reduces total system emissions while maintaining profitability.\r\n\r\n---\r\n\r\n### Mission Alignment: CO₂ Reduction & City Development\r\n\r\nClash of the Cities - Mission Net Zero encodes a profound sustainability insight: environmental protection and economic prosperity are not opposed. The game operationalizes the circular economy as a path to both.\r\n\r\n**The CO₂ Reduction Imperative:**\r\n\r\nGlobal climate science unequivocally links greenhouse gas emissions to warming.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 28
+    }
+  },
+  {
+    "id": "doc-29",
+    "text": "The IPCC (Intergovernmental Panel on Climate Change) reports that limiting warming to 1.5–2°C requires global emissions reductions of 43–50% by 2030 and net-zero by 2050. Urban waste systems contribute 5–10% of global emissions when including collection, processing, landfill gas, and embodied material extraction. Optimizing municipal waste systems is a high-leverage climate intervention.\r\n\r\nWaste reduction, reuse, recycling, and circular design lower emissions by:\r\n- Avoiding virgin resource extraction (mining saves 70–95% energy vs. primary production for most materials).\r\n- Preventing landfill methane (a 28–36x more potent GHG than CO₂ over 100 years).\r\n- Extending product lifespans through remanufacturing and repair.\r\n- Enabling renewable material cycling (biomass loops) and closed technical loops.\r\n\r\nThe game's CO₂ metric represents cumulative system emissions. Players collectively minimize this through:\r\n1.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 29
+    }
+  },
+  {
+    "id": "doc-30",
+    "text": "Municipality: Optimize collection logistics, promote source separation, invest in organic processing.\r\n2. MRF: Maximize material recovery rates, maintain quality, minimize facility emissions.\r\n3. Broker: Consolidate shipments, use efficient transport, develop end-markets.\r\n\r\n**City Development & Economic Prosperity:**\r\n\r\nCircular economies generate economic value:\r\n- **Job creation**: Material recovery, processing, and remanufacturing are labor-intensive, creating skilled and semi-skilled employment.\r\n- **Revenue streams**: Tipping fees, material sales, and service contracts provide municipal revenue for reinvestment.\r\n- **Cost avoidance**: Diverting waste from landfills and incinerators defers expensive infrastructure expansion and avoids long-term remediation costs.\r\n- **Innovation clusters**: Regional leadership in circular technologies attracts investment, R&D centers, and startup ecosystems.\r\n- **Supply security**: Recycled material streams reduce dependence on volatile global co",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 30
+    }
+  },
+  {
+    "id": "doc-31",
+    "text": "mmodity markets.\r\n\r\nIn the game, municipal budget ($) grows through:\r\n- MRF tipping fee revenue.\r\n- Material sales revenue (if municipality owns MRF assets or receives profit-sharing).\r\n- City project investments that generate return (e.g., green infrastructure increasing property values and tax base).\r\n\r\nThe game explicitly tracks **City Health (%)**, reflecting public well-being:\r\n- Lower air pollution from reduced landfill emissions and incineration.\r\n- Healthier water quality from reduced landfill leachate and improved stormwater management.\r\n- Improved livability from green infrastructure and reduced waste visibility.\r\n- Employment and economic opportunity from circular economy jobs.\r\n\r\n**The Win Condition: Balanced Prosperity**\r\n\r\nClash of the Cities - Mission Net Zero succeeds when players achieve:\r\n1. **Minimized CO₂**: System emissions held below a target threshold through efficient operations and strategic investments.\r\n2.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 31
+    }
+  },
+  {
+    "id": "doc-32",
+    "text": "**Growing budget**: Economic viability—operations self-sustaining, reinvestment possible.\r\n3. **Rising city health**: Public satisfaction, environmental quality, and livability improving.\r\n\r\nThis mirrors real-world municipal sustainability planning: cities that implement circular economy principles achieve greenhouse gas reductions while generating economic growth and improved quality of life. The game teaches that circularity is not a sacrifice but a superior business model—profit and planet are aligned.\r\n\r\n**Scaling to Real-World Impact:**\r\n\r\nClash of the Cities - Mission Net Zero educates players (students, municipal staff, sustainability professionals) on system dynamics. Insights gained translate to real policy:\r\n- Understanding trade-offs (collection frequency vs.",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 32
+    }
+  },
+  {
+    "id": "doc-33",
+    "text": "emissions).\r\n- Recognizing interdependencies (municipality demand drives MRF investment drives broker service).\r\n- Appreciating carbon accounting (lifecycle perspective, avoided emissions, system boundaries).\r\n- Valuing circular design (frontload recovery into product design).\r\n\r\nAs players master the game, they internalize circular economy logic and may champion these principles in their professional and civic roles.\r\n\r\n-- End of Document --",
+    "metadata": {
+      "source": "C:\\Users\\User\\Documents\\_Besse\\jun5-before-sh\\Besse-backend\\docs\\game_documentation.txt",
+      "chunk_index": 33
+    }
+  }
+]

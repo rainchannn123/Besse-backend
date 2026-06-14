@@ -59,6 +59,25 @@ const envSchema = z.object({
     .transform(value => value === 'true'),
   ADMIN_MONITOR_USERNAME: z.string().default(''),
   ADMIN_MONITOR_PASSWORD: z.string().default(''),
+
+  // Chatbot / LLM configuration
+  CHATBOT_ENABLED: z
+    .string()
+    .default('true')
+    .transform(value => value === 'true'),
+  CHATBOT_PROVIDER: z.string().default('openai'),
+  CHATBOT_MODEL: z.string().default('gpt-4o-mini'),
+  CHATBOT_SYSTEM_PROMPT: z
+    .string()
+    .default(
+      'You are Clash of the Cities - Mission Net Zero assistant. Help players understand game actions in simple, concise steps.'
+    ),
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_BASE_URL: z.string().default('https://api.openai.com/v1'),
+  // Azure OpenAI settings (optional) - when using Azure, set CHATBOT_PROVIDER=azure
+  AZURE_OPENAI_KEY: z.string().default(''),
+  AZURE_OPENAI_ENDPOINT: z.string().default(''),
+  AZURE_OPENAI_DEPLOYMENT: z.string().default(''),
 });
 
 // Parse and validate environment variables

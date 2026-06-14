@@ -52,11 +52,18 @@ Persistence/domain data structures.
 ### `routes/`
 Route-to-controller bindings by feature.
 - Feature-specific routers (auth, game, lobby, admin, etc.).
+- **Chatbot routes** (`chatbotRoutes.ts`): Three endpoints—
+  - `GET /api/chatbot/status`: Returns vectorstore doc count (diagnostic).
+  - `POST /api/chatbot/message`: Accepts `{message, pageContext, sessionId, history}`, returns `{success, reply}` with markdown LLM response.
+  - `POST /api/chatbot/ingest-docs`: Reads `docs/game_documentation.txt`, chunks at 1000 chars, writes to `Generation/chroma_docs.json`, populates in-memory vectorstore.
 
 ### `services/`
-Core business logic.
+- Core business logic.
 - Domain rules, transitions, orchestration, calculations.
 - Includes websocket integration service and targeted tests.
+- **Chatbot services** (`chatbotService.ts`, `chatbotVectorstoreService.ts`):
+  - `chatbotService.ts`: Orchestrates RAG pipeline—retrieves 4 context chunks from vectorstore, sends to Azure OpenAI REST endpoint with page-specific system prompt, returns markdown-formatted response. Gracefully falls back if keys absent.
+  - `chatbotVectorstoreService.ts`: In-memory vectorstore using token-overlap ranking. Methods: `upsertMany(docs)`, `retrieve(query, topK)`, `count()`, `clear()`.
 
 ### `types/`
 Shared TypeScript type contracts.
@@ -72,6 +79,7 @@ Reusable primitives.
 - Need auth bugs? Inspect `middleware/auth.ts`, `middleware/adminAuth.ts`, `controllers/authController.ts`, `services/authService.ts`, `utils/jwt.ts`.
 - Need socket issues? Inspect `middleware/socketAuth.ts` + `services/websocketService.ts`.
 - Need schema/data constraints? Inspect `models/*` and any validation in `utils/validation.ts`.
+- **Chatbot/RAG issue**: Check `services/chatbotService.ts` (LLM calls, context retrieval) → `services/chatbotVectorstoreService.ts` (document ranking, retrieval) → `routes/chatbotRoutes.ts` (endpoint handlers) → `config/env.ts` (Azure credentials, CHATBOT_PROVIDER setting).
 
 ## Safe-Change Checklist
 - Confirm touched flow in matching route/controller/service chain.

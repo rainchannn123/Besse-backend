@@ -46,6 +46,8 @@ Houses core backend business logic and orchestration. Services should remain the
 - Keep controllers thin and models passive.
 - Return predictable structures or throw standardized errors.
 - Reuse utility helpers for validation, tokens, and responses where appropriate.
+- Place chatbot orchestration in `chatbotService.ts`, including RAG retrieval and provider selection.
+- Use a separate vectorstore helper for retrieval logic, so core chatbot service remains focused on prompt and response handling.
 
 ## High-Value Tracing Patterns
 - Lobby/game bug: trace `lobbyService.ts` ↔ `gameService.ts` ↔ `websocketService.ts`.

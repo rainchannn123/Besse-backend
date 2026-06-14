@@ -38,6 +38,7 @@ Controllers are the HTTP adapter layer: they translate requests into service cal
 - No heavy business rules in controllers.
 - Use centralized async/error wrappers (`utils/asyncHandler.ts`, `utils/AppError.ts`).
 - Keep response structure consistent with shared response utilities.
+- Chatbot controllers should validate message payloads and delegate retrieval/LLM invocation to `chatbotService.ts`.
 
 ## Typical Debug Path
 Route mismatch or bad payload handling:
