@@ -304,6 +304,7 @@ export interface Transaction {
 export interface CityProject {
   id: string;
   name: string;
+  description?: string;
   requiredMaterials: {
     paper?: number;
     plastic?: number;

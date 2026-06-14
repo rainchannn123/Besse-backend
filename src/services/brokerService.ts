@@ -398,6 +398,9 @@ export class BrokerService {
           `[Broker] Your materials are now in Municipality Inventory`
         );
 
+        // Winning team must pay the final bid from its budget
+        gameState.budget -= auction.currentBid;
+
         // Record transaction
         gameState.transactions.push({
           id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -412,8 +415,7 @@ export class BrokerService {
           revenue: 0, // Net zero
         });
 
-        // Net-zero budget change: Broker pays from team budget, MRF receives to team budget
-        // But since both are same team, it cancels out
+        // Internal auction payment: deduct winning bid from team budget
         // Transfer material to municipal inventory
         gameState.municipalInventory[auction.materialType] += auction.mass;
 
