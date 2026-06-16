@@ -19,6 +19,24 @@ export class WebSocketService {
     return `${sessionId}:team:${normalizedRole}`;
   }
 
+  private static getPlayerTeamRoleFromSession(
+    gameState: GameState | null,
+    userId?: string
+  ): 'Team A' | 'Team B' | null {
+    if (!gameState || !userId || !gameState.partnerSessionId) return null;
+
+    const playerIds = [
+      gameState.players?.municipality,
+      gameState.players?.mrf,
+      gameState.players?.broker,
+    ].filter(Boolean) as string[];
+
+    const isInCurrentSession = playerIds.includes(userId);
+    if (!isInCurrentSession) return null;
+
+    return (gameState.teamRole as 'Team A' | 'Team B' | null) || null;
+  }
+
   static initialize(io: SocketIOServer) {
     this.io = io;
 
@@ -70,7 +88,8 @@ export class WebSocketService {
 
           // Join team-specific room for teammate-only chat
           const gameState = await GameService.getGameState(sessionId);
-          const teamRoomName = this.getTeamRoomName(sessionId, gameState?.teamRole || null);
+          const playerTeamRole = this.getPlayerTeamRoleFromSession(gameState, socket.userId);
+          const teamRoomName = this.getTeamRoomName(sessionId, playerTeamRole);
           if (teamRoomName) {
             socket.join(teamRoomName);
             logger.info(
@@ -214,7 +233,8 @@ export class WebSocketService {
           }
 
           const gameState = await GameService.getGameState(sessionId);
-          const teamRoomName = this.getTeamRoomName(sessionId, gameState?.teamRole || null);
+          const playerTeamRole = this.getPlayerTeamRoleFromSession(gameState, socket.userId);
+          const teamRoomName = this.getTeamRoomName(sessionId, playerTeamRole);
           if (!teamRoomName) {
             socket.emit('error', { message: 'Team chat is not available for this session' });
             return;

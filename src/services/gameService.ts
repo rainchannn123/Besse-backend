@@ -234,7 +234,7 @@ export class GameService {
         progress: 0,
         completed: false,
         healthBonus: 13,
-        budgetBonus: 900,
+        budgetBonus: 1200,
         deadline: 12,
       },
       {
@@ -245,7 +245,7 @@ export class GameService {
         progress: 0,
         completed: false,
         healthBonus: 10,
-        budgetBonus: 1800,
+        budgetBonus: 2100,
         deadline: 20,
       },
       {
@@ -288,8 +288,8 @@ export class GameService {
         requiredMaterials: { glass: 10, metal: 12, plastic: 4 },
         progress: 0,
         completed: false,
-        healthBonus: 8,
-        budgetBonus: 1200,
+        healthBonus: 12,
+        budgetBonus: 2700,
         deadline: 18,
       },
       {
@@ -300,7 +300,7 @@ export class GameService {
         progress: 0,
         completed: false,
         healthBonus: 6,
-        budgetBonus: 780,
+        budgetBonus: 1120,
         deadline: 13,
       },
       {
@@ -310,8 +310,8 @@ export class GameService {
         requiredMaterials: { paper: 8, plastic: 8, glass: 8, metal: 8 },
         progress: 0,
         completed: false,
-        healthBonus: 11,
-        budgetBonus: 1300,
+        healthBonus: 9,
+        budgetBonus: 3200,
         deadline: 21,
       },
       {
@@ -322,7 +322,7 @@ export class GameService {
         progress: 0,
         completed: false,
         healthBonus: 9,
-        budgetBonus: 1100,
+        budgetBonus: 2100,
         deadline: 17,
       },
       {
@@ -332,7 +332,7 @@ export class GameService {
         requiredMaterials: { metal: 18, wood: 8, plastic: 5 },
         progress: 0,
         completed: false,
-        healthBonus: 10,
+        healthBonus: 20,
         budgetBonus: 1450,
         deadline: 22,
       },
@@ -343,8 +343,8 @@ export class GameService {
         requiredMaterials: { metal: 7, paper: 9, plastic: 6 },
         progress: 0,
         completed: false,
-        healthBonus: 7,
-        budgetBonus: 920,
+        healthBonus: 9,
+        budgetBonus: 1920,
         deadline: 16,
       },
       {
@@ -355,20 +355,9 @@ export class GameService {
         progress: 0,
         completed: false,
         healthBonus: 12,
-        budgetBonus: 1400,
+        budgetBonus: 2600,
         deadline: 23,
-      },
-      {
-        id: 'p-15',
-        name: 'Emergency Green Shelter',
-        description: 'Build climate-resilient emergency shelters from recovered materials.',
-        requiredMaterials: { metal: 12, wood: 12, glass: 6, plastic: 6 },
-        progress: 0,
-        completed: false,
-        healthBonus: 14,
-        budgetBonus: 1700,
-        deadline: 24,
-      },
+      }
     ];
   }
 
