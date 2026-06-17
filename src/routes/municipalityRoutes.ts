@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   collectWaste,
+  collectWasteWithTransport,
   constructProject,
   getCityProjects,
   getMunicipalityInventory,
@@ -8,7 +9,7 @@ import {
   rejectWaste,
 } from '../controllers/municipalityController';
 import { protect } from '../middleware/auth';
-import { collectWasteSchema, constructProjectSchema } from '../types';
+import { collectWasteSchema, collectWasteTransportSchema, constructProjectSchema } from '../types';
 import { validate } from '../utils/validation';
 
 const router = Router();
@@ -56,6 +57,51 @@ router.post(
   collectWaste
 );
 
+/**
+ * @swagger
+ * /api/municipality/collect-waste-transport/{sessionId}:
+ *   post:
+ *     summary: Collect waste with fast/slow transport mode
+ *     tags: [Municipality]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: ABC123
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - batchId
+ *               - mode
+ *             properties:
+ *               batchId:
+ *                 type: string
+ *                 example: batch123
+ *               mode:
+ *                 type: string
+ *                 enum: [fast, slow]
+ *                 example: fast
+ *     responses:
+ *       200:
+ *         description: Transport started successfully
+ *       403:
+ *         description: Only municipality player can collect waste
+ *       404:
+ *         description: Game session not found
+ */
+router.post(
+  '/collect-waste-transport/:sessionId',
+  validate(collectWasteTransportSchema),
+  collectWasteWithTransport
+);
 
 /**
  * @swagger

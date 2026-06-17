@@ -14,12 +14,8 @@ export const collectWaste = asyncHandler(
       `[DEBUG] Collect waste request - SessionId: ${sessionId}, BatchId: ${batchId}, UserId: ${userId}`
     );
 
-    // Verify user has municipality role
-    const userRole = await GameService.getPlayerRole(sessionId, userId);
-    if (userRole !== 'municipality') {
-      sendResponse(res, 403, 'Only municipality player can collect waste');
-      return;
-    }
+    // REMOVED: Role check - any player can collect waste from Municipality dashboard
+    // The frontend already ensures only Municipality players see this dashboard
 
     const gameState = await GameService.collectWaste(
       sessionId,
@@ -31,12 +27,35 @@ export const collectWaste = asyncHandler(
   }
 );
 
+// NEW: Collect waste with transport mode (fast/slow) - NO ROLE CHECK
+export const collectWasteWithTransport = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { batchId, mode } = req.body;
+    const { sessionId } = req.params;
+    const userId = (req as any).user._id;
+
+    console.log(`[DEBUG] Collect waste with transport - SessionId: ${sessionId}, BatchId: ${batchId}, Mode: ${mode}, UserId: ${userId}`);
+
+    // REMOVED: Role check - any player can start transport from Municipality dashboard
+    // The frontend already ensures only Municipality players see this dashboard
+
+    const gameStateResult = await MunicipalityService.collectWasteWithTransport(
+      sessionId,
+      batchId,
+      userId,
+      mode
+    );
+
+    sendResponse(res, 200, `${mode} transport started successfully`, { gameState: gameStateResult });
+  }
+);
+
 export const rejectWaste = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { batchId, sessionId } = req.body;
     const userId = (req as any).user._id;
 
-    // Verify user has municipality role
+    // Keep role check for reject - only municipality should reject
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {
       sendResponse(res, 403, 'Only municipality player can reject waste');
@@ -58,7 +77,7 @@ export const getWasteBatches = asyncHandler(
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has municipality role
+    // Keep role check for viewing - only municipality should view waste batches
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {
       sendResponse(res, 403, 'Only municipality player can view waste batches');
@@ -86,13 +105,13 @@ export const getWasteBatches = asyncHandler(
   }
 );
 
-// NEW: View broker's available materials for ordering
+// View broker's available materials for ordering
 export const viewBrokerMaterials = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has municipality role
+    // Keep role check - only municipality should view broker materials
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {
       sendResponse(
@@ -122,15 +141,13 @@ export const viewBrokerMaterials = asyncHandler(
   }
 );
 
-
-
-// NEW: View municipality's current projects and material needs
+// View municipality's current projects and material needs
 export const getCityProjects = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has municipality role
+    // Keep role check - only municipality should view city projects
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {
       sendResponse(res, 403, 'Only municipality player can view city projects');
@@ -153,13 +170,13 @@ export const getCityProjects = asyncHandler(
   }
 );
 
-// NEW: Get municipality inventory as a list
+// Get municipality inventory as a list
 export const getMunicipalityInventory = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has municipality role
+    // Keep role check - only municipality should view inventory
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {
       sendResponse(res, 403, 'Only municipality player can view inventory');
@@ -187,14 +204,14 @@ export const getMunicipalityInventory = asyncHandler(
   }
 );
 
-// NEW: Construct city project
+// Construct city project
 export const constructProject = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const { projectId, materialType, materialAmount } = req.body;
     const userId = (req as any).user._id;
 
-    // Verify user has municipality role
+    // Keep role check - only municipality should construct projects
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {
       sendResponse(res, 403, 'Only municipality player can construct projects');

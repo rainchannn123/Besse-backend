@@ -30,30 +30,35 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
       processRate: 0.85,
       wasteRate: 0.15,
       co2Profile: 'Low',
+      co2EmissionPerTon: 0.8,
     },
     plastic: {
       basePrice: 350,
       processRate: 0.8,
       wasteRate: 0.2,
       co2Profile: 'High',
+      co2EmissionPerTon: 2.5,
     },
     metal: {
       basePrice: 600,
       processRate: 0.9,
       wasteRate: 0.1,
       co2Profile: 'Med',
+      co2EmissionPerTon: 1.5,
     },
     glass: {
       basePrice: 120,
       processRate: 0.75,
       wasteRate: 0.25,
       co2Profile: 'Low',
+      co2EmissionPerTon: 0.6,
     },
     wood: {
       basePrice: 100,
       processRate: 0.9,
       wasteRate: 0.1,
       co2Profile: 'Med',
+      co2EmissionPerTon: 0.3,
     },
   },
 
@@ -72,12 +77,10 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   COUNTDOWN_RECOVERY_HEALTH_THRESHOLD: 5,
   COUNTDOWN_RECOVERY_BUDGET_THRESHOLD: 1000,
 
-  // Auction and Broker settings
   AUCTION_DURATION_SECONDS: 30,
   AUCTION_BID_INCREMENT_RATE: 0.05,
   PLAYER_BID_CAP: 10,
   MARKUP_CONSTANT: 2,
 
-  // Penalties
   REFUSE_HEALTH_PENALTY_PER_TON: 0.5,
 };

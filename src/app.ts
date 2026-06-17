@@ -16,6 +16,7 @@ import gameRoutes from './routes/gameRoutes';
 import lobbyRoutes from './routes/lobbyRoutes';
 import mrfRoutes from './routes/mrfRoutes';
 import municipalityRoutes from './routes/municipalityRoutes';
+import waitingRoomRoutes from './routes/waitingRoomRoutes';
 import { GameService } from './services/gameService';
 import { LobbyService } from './services/lobbyService';
 import { WebSocketService } from './services/websocketService';
@@ -31,26 +32,18 @@ connectDB();
 app.use(securityHeaders);
 app.use(cors());
 
-// app.use(
-//   cors({
-//     origin: env.ALLOWED_ORIGINS,
-//     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-//     credentials: true,
-//   })
-// );
-
-// Body parsing middleware
+// Body parsing middleware - MUST be before routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging
 app.use(requestLogger);
 
-// Rate limiting
+// Rate limiting (commented out)
 // app.use('/api/auth', authLimiter);
 // app.use('/api/', generalLimiter);
 
-// API Routes
+// API Routes - ALL routes go here (after body parsing)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/lobby', lobbyRoutes);
@@ -58,6 +51,7 @@ app.use('/api/games', gameRoutes);
 app.use('/api/municipality', municipalityRoutes);
 app.use('/api/mrf', mrfRoutes);
 app.use('/api/broker', brokerRoutes);
+app.use('/api/waiting-rooms', waitingRoomRoutes);
 
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
@@ -99,43 +93,36 @@ const PORT = env.PORT;
 const server = createServer(app);
 
 // Initialize Socket.IO for real-time communication
-// CORS configuration allows frontend connections in development and production
 const io = new SocketIOServer(server, {
   cors: {
     origin: env.ALLOWED_ORIGINS,
-    methods: ['GET', 'POST'], // Allow WebSocket connection methods
-    credentials: true, // Allow cookies and authentication headers
+    methods: ['GET', 'POST'],
+    credentials: true,
   },
-  pingTimeout: 60000, // 60 seconds before considering connection dead
-  pingInterval: 25000, // Send ping every 25 seconds to keep connection alive
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 // Initialize WebSocket service
 WebSocketService.initialize(io);
 
-// Scheduled system checks (every 30 seconds as per manual)
-const SYSTEM_CHECK_INTERVAL = 30 * 1000; // 30 seconds
+// Scheduled system checks (every 30 seconds)
+const SYSTEM_CHECK_INTERVAL = 30 * 1000;
 
 setInterval(async () => {
   try {
-    // Get all active game sessions from database
     const activeSessions = await GameSession.find({
       'gameState.gameStatus': 'active',
     });
 
-    logger.info(
-      `Running system checks for ${activeSessions.length} active games`
-    );
+    logger.info(`Running system checks for ${activeSessions.length} active games`);
 
     for (const session of activeSessions) {
       try {
         await GameService.performSystemCheck(session.sessionId);
         logger.info(`System check completed for session: ${session.sessionId}`);
       } catch (error) {
-        logger.error(
-          `System check failed for session ${session.sessionId}`,
-          error
-        );
+        logger.error(`System check failed for session ${session.sessionId}`, error);
       }
     }
   } catch (error) {
@@ -143,7 +130,7 @@ setInterval(async () => {
   }
 }, SYSTEM_CHECK_INTERVAL);
 
-// Pairing scheduler: checks unpaired queue every 30 second and creates pairs
+// Pairing scheduler
 setInterval(async () => {
   try {
     const pairs = await LobbyService.checkAndCreatePairs();
@@ -157,10 +144,9 @@ setInterval(async () => {
   }
 }, SYSTEM_CHECK_INTERVAL);
 
-// Countdown broadcaster: broadcasts countdown warnings every 1 second for active countdowns
+// Countdown broadcaster
 setInterval(async () => {
   try {
-    // Get all active games with countdown
     const gamesWithCountdown = await GameSession.find({
       'gameState.gameOverCountdown.active': true,
       'gameState.gameStatus': 'active',
@@ -187,8 +173,6 @@ setInterval(async () => {
             'warning'
           );
         } else {
-          // Countdown reached zero: force an immediate system check so game
-          // transitions to final status without waiting for the 30s scheduler.
           try {
             await GameService.performSystemCheck(session.sessionId);
           } catch (err) {
@@ -200,14 +184,12 @@ setInterval(async () => {
   } catch (error) {
     logger.error('Error during countdown broadcaster', error);
   }
-}, 1000); // Every 1 second
+}, 1000);
 
 server.listen(PORT, () => {
   logger.info(`Besse Backend server running on port ${PORT}`);
   logger.info(`WebSocket server initialized`);
-  logger.info(
-    `System checks scheduled every ${SYSTEM_CHECK_INTERVAL / 1000} seconds`
-  );
+  logger.info(`System checks scheduled every ${SYSTEM_CHECK_INTERVAL / 1000} seconds`);
 });
 
 export default app;

@@ -21,7 +21,7 @@ interface MonitorUserRecord {
   name: string;
   email: string;
   role: string;
-  accountType: string;  // ← ADDED THIS
+  accountType: string;
   currentSession: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -106,7 +106,6 @@ export const adminLogin = async (username: string, password: string) => {
 
 export const getAdminMonitoringOverview = async () => {
   const [users, lobbies, gameSessions] = await Promise.all([
-    // UPDATED: Added accountType to the query
     User.find({}, 'name email role accountType currentSession createdAt updatedAt')
       .sort({ createdAt: -1 })
       .lean<MonitorUserRecord[]>(),
@@ -151,7 +150,7 @@ export const getAdminMonitoringOverview = async () => {
       name: user.name,
       email: user.email,
       accountRole: user.role,
-      accountType: (user as any).accountType || 'student',  // ← ADDED THIS
+      accountType: (user as any).accountType || 'student',
       currentSession: sessionId,
       status: derivePlayerStatus(user, lobbyBySession, gameBySession),
       hasActiveSocketConnections: sessionId
@@ -246,35 +245,59 @@ export const forceExitPlayer = async (userId: string, reason?: string) => {
 
   const previousSession = user.currentSession;
 
+  // ✅ ALWAYS clear the session first
+  user.currentSession = null;
+
+  // Try to clean up lobby if it exists
   if (previousSession) {
     const lobby = await Lobby.findOne({ sessionId: previousSession });
 
     if (lobby) {
+      // Remove player from lobby
       lobby.players = lobby.players.filter(
         player => String(player.userId) !== String(user._id)
       );
 
+      // If leader left, assign new leader
       if (String(lobby.leader) === String(user._id) && lobby.players.length > 0) {
         lobby.leader = lobby.players[0].userId;
       }
 
+      // Delete lobby if empty
       if (lobby.players.length === 0) {
         await Lobby.deleteOne({ _id: lobby._id });
       } else {
         await lobby.save();
       }
+
+      // Broadcast system message
+      WebSocketService.broadcastSystemMessage(
+        previousSession,
+        `${user.name} was removed from the game by admin${
+          reason ? `: ${reason}` : ''
+        }`,
+        'warning'
+      );
     }
 
-    WebSocketService.broadcastSystemMessage(
-      previousSession,
-      `${user.name} was removed from the game by admin${
-        reason ? `: ${reason}` : ''
-      }`,
-      'warning'
-    );
+    // ✅ Also clean up any GameSession if exists
+    const gameSession = await GameSession.findOne({ sessionId: previousSession });
+    if (gameSession) {
+      // Check if user is in this game and remove them if needed
+      const isInGame = 
+        String(gameSession.players.municipality) === String(user._id) ||
+        String(gameSession.players.mrf) === String(user._id) ||
+        String(gameSession.players.broker) === String(user._id);
+      
+      if (isInGame) {
+        // You might want to handle game state cleanup here
+        // For now, just log it
+        console.log(`User ${user.name} was in game session ${previousSession}`);
+      }
+    }
   }
 
-  user.currentSession = null;
+  // ✅ Save user with cleared session
   await user.save();
 
   return {
@@ -312,7 +335,6 @@ export const getPlayerGameHistory = async (
     GameSession.countDocuments({ $or: orFilter }),
   ]);
 
-  // Batch-fetch partner sessions to get competitor names
   const partnerSessionIds = records
     .map(s => s.gameState?.partnerSessionId)
     .filter(Boolean) as string[];
