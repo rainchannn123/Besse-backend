@@ -131,5 +131,33 @@
     "metadata": {
       "chunk_index": 18
     }
+  },
+  {
+    "id": "doc-19",
+    "text": "## 11) Metric Influencer Reference (Game Mechanics)\r\n\r\n### 11.1 City Health Influencers\r\nCity Health rises or falls from combined operational behavior.\r\n\r\nMajor negative influencers:\r\n- Unmanaged or overdue waste batches\r\n- Long pending queues and sustained bottlenecks\r\n- Failed or delayed processing throughput\r\n- High contamination and poor material handling quality\r\n- Compounded emissions and unstable system flow\r\n\r\nMajor positive influencers:\r\n- Fast, consistent collection and dispatch\r\n- Stable MRF throughput and queue reduction\r\n- Better sorting quality and lower contamination\r\n- Coordinated role actions that reduce pressure quickly\r\n\r\nPractical rule: Health drops when backlog and instability persist; Health recovers when flow is controlled and pressure is reduced quickly.",
+    "metadata": {
+      "chunk_index": 19
+    }
+  },
+  {
+    "id": "doc-20",
+    "text": "## 12) Wallet/Budget Influencers (Team Cash)\r\n\r\nBudget (wallet) is affected by both costs and value recovery.\r\n\r\nMajor negative influencers:\r\n- Operating/handling costs during waste collection and processing\r\n- Inefficiency penalties from delays and poor coordination\r\n- Holding inventory too long during weak market windows\r\n- Missed conversion opportunities from poor quality output\r\n\r\nMajor positive influencers:\r\n- Successful material sales and better pricing outcomes\r\n- High-quality recovered materials with stronger market value\r\n- Timely trading and inventory turnover by Broker\r\n- Municipality and MRF decisions that reduce avoidable losses\r\n\r\nPractical rule: Wallet grows from quality recovery plus timely market execution; wallet shrinks when costs and delays compound faster than revenue.",
+    "metadata": {
+      "chunk_index": 20
+    }
+  },
+  {
+    "id": "doc-21",
+    "text": "## 13) CO₂ Emission Influencers\r\n\r\nCO₂ in-game reflects climate impact from waste-system operations.\r\n\r\nMajor emission drivers:\r\n- Repeated transport and unnecessary movement of waste/materials\r\n- Energy-intensive or delayed processing paths\r\n- Idle stock, rework, and inefficient handling loops\r\n- Disposal-heavy patterns that miss recovery opportunities\r\n\r\nMajor CO₂ reduction drivers:\r\n- Short, efficient logistics loops\r\n- Faster processing and less queue idling\r\n- Higher recovery rates and lower contamination\r\n- Coordinated end-to-end flow from Municipality -> MRF -> Broker\r\n\r\nPractical rule: CO₂ increases with inefficient movement and delay; CO₂ decreases when teams keep materials in efficient circular loops.",
+    "metadata": {
+      "chunk_index": 21
+    }
+  },
+  {
+    "id": "doc-22",
+    "text": "## 14) Simple Equation-Style Mental Model\r\n\r\nThese are simplified mental models for player understanding (not exact engine code):\r\n\r\nHealth_next ≈ Health_now - BacklogPenalty - DelayPenalty - ContaminationPenalty - EmissionStress + RecoveryActions\r\n\r\nWallet_next ≈ Wallet_now + SalesRevenue + ProjectRewards - OperatingCosts - InefficiencyPenalties\r\n\r\nCO2_next ≈ CO2_now + TransportEmissions + ProcessingEmissions + InefficiencyEmissions - CircularEfficiencySavings\r\n\r\nWhere:\r\n- Backlog/Delay/Contamination terms grow when queues and poor handling persist\r\n- Revenue terms grow with high-quality output and good market timing\r\n- Emission terms grow with repeated movement and idle/rework loops\r\n\r\nUse this model to reason about trade-offs quickly during live play.",
+    "metadata": {
+      "chunk_index": 22
+    }
   }
 ]
