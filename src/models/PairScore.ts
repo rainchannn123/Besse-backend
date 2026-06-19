@@ -11,6 +11,15 @@ export interface IPairScore extends Document {
   teamBBudget: number;
   teamACO2: number;
   teamBCO2: number;
+  teamAScore: number;
+  teamBScore: number;
+  winningTeam: 'Team A' | 'Team B' | 'Tie' | null;
+  scoreRanking: Array<{
+    rank: number;
+    team: 'Team A' | 'Team B';
+    sessionId: string;
+    finalScore: number;
+  }>;
   teamAGameStatus: string; // 'active', 'lost', 'complete'
   teamBGameStatus: string; // 'active', 'lost', 'complete'
   teamAPairStatus: string; // 'active', 'eliminated'
@@ -63,6 +72,34 @@ const pairScoreSchema = new Schema<IPairScore>(
     teamBCO2: {
       type: Number,
       required: true,
+    },
+    teamAScore: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    teamBScore: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    winningTeam: {
+      type: String,
+      required: false,
+      enum: ['Team A', 'Team B', 'Tie', null],
+      default: null,
+    },
+    scoreRanking: {
+      type: [
+        {
+          rank: { type: Number, required: true },
+          team: { type: String, required: true, enum: ['Team A', 'Team B'] },
+          sessionId: { type: String, required: true },
+          finalScore: { type: Number, required: true },
+        },
+      ],
+      required: true,
+      default: [],
     },
     teamAGameStatus: {
       type: String,

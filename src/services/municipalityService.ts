@@ -400,10 +400,12 @@ export class MunicipalityService {
     if (project.progress >= 100) {
       project.completed = true;
       const budgetBonus = project.budgetBonus ?? 0;
+      const scoreBonus = project.scoreBonus ?? 0;
       gameState.cityHealth += project.healthBonus;
       gameState.budget += budgetBonus;
+      gameState.teamScore = (gameState.teamScore || 0) + scoreBonus;
       gameState.activityLog.unshift(
-        `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${budgetBonus.toFixed(0)} Budget`
+        `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${budgetBonus.toFixed(0)} Budget, +${scoreBonus} Score`
       );
     } else {
       gameState.activityLog.unshift(
@@ -422,7 +424,7 @@ export class MunicipalityService {
       playerId,
       'Municipality',
       project.completed
-        ? `completed project ${project.name}! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget`
+        ? `completed project ${project.name}! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget, +${project.scoreBonus ?? 0} Score`
         : `contributed ${materialAmount.toFixed(1)}t ${materialType} to ${project.name} (Progress: ${project.progress.toFixed(1)}%)`
     );
 
@@ -430,7 +432,7 @@ export class MunicipalityService {
     WebSocketService.broadcastSystemMessage(
       sessionId,
       project.completed
-        ? `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget. Updated Health: ${gameState.cityHealth.toFixed(1)}%, Budget: $${gameState.budget.toFixed(0)}`
+        ? `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget, +${project.scoreBonus ?? 0} Score. Updated Health: ${gameState.cityHealth.toFixed(1)}%, Budget: $${gameState.budget.toFixed(0)}, Score: ${gameState.teamScore}/${gameState.maxTeamScore}`
         : `Municipality contributed ${materialAmount.toFixed(1)} tons ${materialType} to ${project.name}. Progress: ${project.progress.toFixed(1)}%`,
       'info'
     );
@@ -449,6 +451,9 @@ export class MunicipalityService {
           completed: project.completed,
           healthBonusApplied: project.completed ? project.healthBonus : 0,
           budgetBonusApplied: project.completed ? (project.budgetBonus ?? 0) : 0,
+          scoreBonusApplied: project.completed ? (project.scoreBonus ?? 0) : 0,
+          teamScore: gameState.teamScore,
+          maxTeamScore: gameState.maxTeamScore,
         }
       );
     } catch (err) {
