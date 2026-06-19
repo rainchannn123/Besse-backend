@@ -401,10 +401,12 @@ export class MunicipalityService {
     if (project.progress >= 100) {
       project.completed = true;
       const budgetBonus = project.budgetBonus ?? 0;
+      const scoreBonus = project.scoreBonus ?? 0;
       gameState.cityHealth += project.healthBonus;
       gameState.budget += budgetBonus;
+      gameState.teamScore = (gameState.teamScore || 0) + scoreBonus;
       gameState.activityLog.unshift(
-        `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${budgetBonus.toFixed(0)} Budget`
+        `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${budgetBonus.toFixed(0)} Budget, +${scoreBonus} Score`
       );
     } else {
       gameState.activityLog.unshift(
@@ -422,14 +424,14 @@ export class MunicipalityService {
       playerId,
       'Municipality',
       project.completed
-        ? `completed project ${project.name}! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget, CO₂: +${co2Emitted.toFixed(1)}t`
+        ? `completed project ${project.name}! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget, CO₂: +${co2Emitted.toFixed(1)}t, +${project.scoreBonus ?? 0} Score`
         : `added ${materialAmount.toFixed(1)}t ${materialType} to ${project.name} (Progress: ${project.progress.toFixed(1)}%, CO₂: +${co2Emitted.toFixed(1)}t)`
     );
 
     WebSocketService.broadcastSystemMessage(
       sessionId,
       project.completed
-        ? `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget. CO₂: +${co2Emitted.toFixed(1)}t`
+        ? `🎉 ${project.name} completed! +${project.healthBonus}% Health, +$${(project.budgetBonus ?? 0).toFixed(0)} Budget, +${project.scoreBonus ?? 0} Score. CO₂: +${co2Emitted.toFixed(1)}t, Score: ${gameState.teamScore}/${gameState.maxTeamScore}`
         : `Added ${materialAmount.toFixed(1)} tons ${materialType} to ${project.name}. Progress: ${project.progress.toFixed(1)}%. CO₂: +${co2Emitted.toFixed(1)}t`,
       'info'
     );
@@ -448,6 +450,9 @@ export class MunicipalityService {
           healthBonusApplied: project.completed ? project.healthBonus : 0,
           budgetBonusApplied: project.completed ? (project.budgetBonus ?? 0) : 0,
           co2Emitted: co2Emitted,
+          scoreBonusApplied: project.completed ? (project.scoreBonus ?? 0) : 0,
+          teamScore: gameState.teamScore,
+          maxTeamScore: gameState.maxTeamScore,
         }
       );
     } catch (err) {}

@@ -151,6 +151,8 @@ export interface GameState {
   currentTurn: number;
   budget: number;
   cityHealth: number;
+  teamScore: number;
+  maxTeamScore: number;
   totalCO2: number;
   wasteInventory: number;
   maxCapacity: number;
@@ -276,6 +278,7 @@ export interface Transaction {
 export interface CityProject {
   id: string;
   name: string;
+  description?: string;
   requiredMaterials: {
     paper?: number;
     plastic?: number;
@@ -294,6 +297,9 @@ export interface CityProject {
   completed: boolean;
   healthBonus: number;
   budgetBonus: number;
+  scoreBonus: number;
+  difficultyScore: number;
+  estimatedExternalCost: number;
   deadline: number;
 }
 

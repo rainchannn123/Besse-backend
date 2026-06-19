@@ -12,6 +12,7 @@ import GameSession from './models/GameSession';
 import adminRoutes from './routes/adminRoutes';
 import authRoutes from './routes/authRoutes';
 import brokerRoutes from './routes/brokerRoutes';
+import chatbotRoutes from './routes/chatbotRoutes';
 import gameRoutes from './routes/gameRoutes';
 import lobbyRoutes from './routes/lobbyRoutes';
 import mrfRoutes from './routes/mrfRoutes';
@@ -27,6 +28,8 @@ const app = express();
 
 // Connect to MongoDB
 connectDB();
+import fs from 'fs';
+import path from 'path';
 
 // Security Middlewares
 app.use(securityHeaders);
@@ -46,11 +49,29 @@ app.use(requestLogger);
 // API Routes - ALL routes go here (after body parsing)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+// Auto-load vectorstore docs if present
+try {
+  const docsPath = path.join(__dirname, '..', 'vectorstore', 'chroma_docs.json');
+  if (fs.existsSync(docsPath)) {
+    const raw = fs.readFileSync(docsPath, 'utf-8');
+    const docs = JSON.parse(raw) as Array<{ id: string; text: string; metadata?: Record<string, unknown> }>; 
+    // lazy import to avoid circular inits
+    import('./services/chatbotService').then(mod => {
+      if (mod.chatbotService && typeof mod.chatbotService.ingestSeedDocs === 'function') {
+        mod.chatbotService.ingestSeedDocs(docs);
+        console.log(`Loaded ${docs.length} chatbot docs from vectorstore/chroma_docs.json`);
+      }
+    }).catch(err => console.error('Failed loading chatbot docs:', err));
+  }
+} catch (e) {
+  console.warn('No prebuilt chatbot docs found or failed to load.');
+}
 app.use('/api/lobby', lobbyRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/municipality', municipalityRoutes);
 app.use('/api/mrf', mrfRoutes);
 app.use('/api/broker', brokerRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/waiting-rooms', waitingRoomRoutes);
 
 // Swagger Documentation

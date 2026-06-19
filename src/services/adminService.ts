@@ -298,6 +298,7 @@ export const forceExitPlayer = async (userId: string, reason?: string) => {
   }
 
   // ✅ Save user with cleared session
+  user.role = null;
   await user.save();
 
   return {

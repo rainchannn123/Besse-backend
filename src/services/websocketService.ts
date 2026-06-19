@@ -13,6 +13,30 @@ export class WebSocketService {
   private static io: SocketIOServer;
   private static gameRooms: Map<string, Set<string>> = new Map(); // sessionId -> Set of socketIds
 
+  private static getTeamRoomName(sessionId: string, teamRole?: string | null): string | null {
+    if (!teamRole) return null;
+    const normalizedRole = String(teamRole).trim().toLowerCase().replace(/\s+/g, '-');
+    return `${sessionId}:team:${normalizedRole}`;
+  }
+
+  private static getPlayerTeamRoleFromSession(
+    gameState: GameState | null,
+    userId?: string
+  ): 'Team A' | 'Team B' | null {
+    if (!gameState || !userId || !gameState.partnerSessionId) return null;
+
+    const playerIds = [
+      gameState.players?.municipality,
+      gameState.players?.mrf,
+      gameState.players?.broker,
+    ].filter(Boolean) as string[];
+
+    const isInCurrentSession = playerIds.includes(userId);
+    if (!isInCurrentSession) return null;
+
+    return (gameState.teamRole as 'Team A' | 'Team B' | null) || null;
+  }
+
   static initialize(io: SocketIOServer) {
     this.io = io;
 
@@ -61,6 +85,17 @@ export class WebSocketService {
 
           // Join the game room
           socket.join(sessionId);
+
+          // Join team-specific room for teammate-only chat
+          const gameState = await GameService.getGameState(sessionId);
+          const playerTeamRole = this.getPlayerTeamRoleFromSession(gameState, socket.userId);
+          const teamRoomName = this.getTeamRoomName(sessionId, playerTeamRole);
+          if (teamRoomName) {
+            socket.join(teamRoomName);
+            logger.info(
+              `[WebSocket] User ${socket.user?.name} joined team room: ${teamRoomName}`
+            );
+          }
 
           // Track socket in game room
           if (!this.gameRooms.has(sessionId)) {
@@ -178,6 +213,44 @@ export class WebSocketService {
         } catch (err) {
           logger.error('[Surrender] Error handling surrender-toggle:', err);
           socket.emit('error', { message: 'Failed to process surrender vote' });
+        }
+      });
+
+      // Team chat (only visible within same game session room)
+      socket.on('team-chat-message', async (data: { sessionId: string; message: string }) => {
+        const { sessionId, message } = data || {};
+
+        try {
+          if (!sessionId || !message || !message.trim()) {
+            socket.emit('error', { message: 'Invalid team chat payload' });
+            return;
+          }
+
+          const hasAccess = await validateGameAccess(socket, sessionId);
+          if (!hasAccess) {
+            socket.emit('error', { message: 'You do not have access to this game session' });
+            return;
+          }
+
+          const gameState = await GameService.getGameState(sessionId);
+          const playerTeamRole = this.getPlayerTeamRoleFromSession(gameState, socket.userId);
+          const teamRoomName = this.getTeamRoomName(sessionId, playerTeamRole);
+          if (!teamRoomName) {
+            socket.emit('error', { message: 'Team chat is not available for this session' });
+            return;
+          }
+
+          this.io.to(teamRoomName).emit('team-chat-message', {
+            senderId: socket.userId,
+            senderName: socket.user?.name || 'Unknown',
+            senderRole: socket.user?.role || 'player',
+            message: message.trim(),
+            sessionId,
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          logger.error('[WebSocket] Error handling team-chat-message:', err);
+          socket.emit('error', { message: 'Failed to send team chat message' });
         }
       });
 

@@ -14,6 +14,14 @@ export class GameService {
   // UPDATED: Exact constants from the manual with correct values and units
   private static constants: GameConstants = DEFAULT_GAME_CONSTANTS;
 
+  private static readonly MATERIAL_COST_WEIGHTS: Record<'paper' | 'plastic' | 'metal' | 'glass' | 'wood', number> = {
+    paper: 180,
+    plastic: 350,
+    metal: 600,
+    glass: 120,
+    wood: 100,
+  };
+
   // Updated method to complete all transports (multiple concurrent transports)
   static async checkAndCompleteTransports(sessionId: string): Promise<void> {
     const gameState = await this.getGameState(sessionId);
@@ -69,6 +77,8 @@ export class GameService {
         currentTurn: 1,
         budget: this.constants.STARTING_BUDGET,
         cityHealth: this.constants.STARTING_HEALTH,
+        teamScore: 0,
+        maxTeamScore: 0,
         totalCO2: 0,
         wasteInventory: 0,
         maxCapacity: 150,
@@ -137,6 +147,11 @@ export class GameService {
         surrenderVotes: [],
         activeTransports: [], // NEW: Array of active transports for multiple concurrent transports
       };
+
+      gameState.maxTeamScore = gameState.cityProjects.reduce(
+        (sum, project) => sum + (project.scoreBonus || 0),
+        0
+      );
 
       // Spawn initial waste batch immediately
       this.spawnWaste(gameState);
@@ -213,60 +228,230 @@ export class GameService {
     }
   }
 
-  // Helper method to generate initial projects
+  // Helper method to generate initial projects with difficulty-based score rewards
   private static generateInitialProjects(): CityProject[] {
-    return [
+    const projects: CityProject[] = [
       {
         id: 'p-1',
-        name: 'Community Park',
-        requiredMaterials: { paper: 10, wood: 5 },
+        name: 'Neighborhood Pocket Park Upgrade',
+        description: 'Install recycled benches and planters in a small neighborhood pocket park.',
+        requiredMaterials: { wood: 3, paper: 2 },
         progress: 0,
         completed: false,
-        healthBonus: 4,
-        budgetBonus: 800,
-        deadline: 10,
+        healthBonus: 2,
+        budgetBonus: 300,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 8,
       },
       {
         id: 'p-2',
-        name: 'Recycling Center',
-        requiredMaterials: { metal: 8, plastic: 6 },
+        name: 'Eco Bus Stop Shelter Upgrade',
+        description: 'Add lightweight recycled canopy shades and seat panels to bus stops.',
+        requiredMaterials: { plastic: 5, metal: 2, wood: 1 },
         progress: 0,
         completed: false,
-        healthBonus: 9,
-        budgetBonus: 650,
-        deadline: 15,
+        healthBonus: 3,
+        budgetBonus: 420,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 9,
       },
       {
         id: 'p-3',
-        name: 'Green Plaza',
-        requiredMaterials: { glass: 12, paper: 8, wood: 4 },
+        name: 'Community Compost Kiosk Network',
+        description: 'Deploy small compost information kiosks across residential zones.',
+        requiredMaterials: { wood: 6, glass: 3, paper: 4 },
         progress: 0,
         completed: false,
-        healthBonus: 13,
-        budgetBonus: 900,
+        healthBonus: 4,
+        budgetBonus: 650,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
         deadline: 12,
       },
       {
         id: 'p-4',
-        name: 'Transit Hub',
-        requiredMaterials: { metal: 15, plastic: 10 },
+        name: 'School Recycling Corner Program',
+        description: 'Create dedicated sorting points in schools to reduce mixed waste streams.',
+        requiredMaterials: { paper: 8, plastic: 6, metal: 3 },
         progress: 0,
         completed: false,
-        healthBonus: 10,
-        budgetBonus: 1800,
-        deadline: 20,
+        healthBonus: 5,
+        budgetBonus: 780,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 13,
       },
       {
         id: 'p-5',
-        name: 'Waste-to-Energy Plant',
-        requiredMaterials: { metal: 10, glass: 8, plastic: 6 },
+        name: 'Green Civic Plaza Development',
+        description: 'Build a central eco-plaza with reclaimed materials and modular seating.',
+        requiredMaterials: { glass: 9, wood: 7, paper: 5, metal: 3 },
         progress: 0,
         completed: false,
-        healthBonus: 15,
-        budgetBonus: 1500,
-        deadline: 25,
+        healthBonus: 7,
+        budgetBonus: 1200,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 16,
       },
+      {
+        id: 'p-6',
+        name: 'Riverfront Cleanup & Sorting Pier',
+        description: 'Install interception docks and sort stations near waterways.',
+        requiredMaterials: { wood: 9, metal: 8, plastic: 5, glass: 4 },
+        progress: 0,
+        completed: false,
+        healthBonus: 8,
+        budgetBonus: 1450,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 17,
+      },
+      {
+        id: 'p-7',
+        name: 'Sustainable Transit Hub Retrofit',
+        description: 'Retrofit transit stations with durable recycled structures and safety barriers.',
+        requiredMaterials: { metal: 14, plastic: 9, glass: 6 },
+        progress: 0,
+        completed: false,
+        healthBonus: 9,
+        budgetBonus: 1800,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 19,
+      },
+      {
+        id: 'p-8',
+        name: 'Smart Waste Bin Network',
+        description: 'Deploy sensor-enabled bins and route beacons for optimized collection.',
+        requiredMaterials: { plastic: 14, metal: 10, glass: 6, paper: 3 },
+        progress: 0,
+        completed: false,
+        healthBonus: 10,
+        budgetBonus: 2000,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 18,
+      },
+      {
+        id: 'p-9',
+        name: 'Solar-Powered Street Canopy System',
+        description: 'Build solar-ready canopy lanes with reinforced recycled supports.',
+        requiredMaterials: { glass: 13, metal: 16, plastic: 6, wood: 4 },
+        progress: 0,
+        completed: false,
+        healthBonus: 12,
+        budgetBonus: 2600,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 20,
+      },
+      {
+        id: 'p-10',
+        name: 'Urban Materials Innovation Center',
+        description: 'Open an urban lab for advanced reuse prototyping and pilot processing.',
+        requiredMaterials: { paper: 10, plastic: 12, glass: 10, metal: 14, wood: 6 },
+        progress: 0,
+        completed: false,
+        healthBonus: 14,
+        budgetBonus: 3100,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 22,
+      },
+      {
+        id: 'p-11',
+        name: 'Resilient Eco-School Retrofit',
+        description: 'Upgrade schools with resilient recycled structures and low-emission finishes.',
+        requiredMaterials: { wood: 15, glass: 8, paper: 9, metal: 5 },
+        progress: 0,
+        completed: false,
+        healthBonus: 11,
+        budgetBonus: 2400,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 21,
+      },
+      {
+        id: 'p-12',
+        name: 'Industrial Reuse & Recovery Depot',
+        description: 'Set up a heavy-duty depot for industrial-scale material recirculation.',
+        requiredMaterials: { metal: 20, wood: 10, plastic: 9, glass: 6 },
+        progress: 0,
+        completed: false,
+        healthBonus: 16,
+        budgetBonus: 3400,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 24,
+      },
+      {
+        id: 'p-13',
+        name: 'Community Repair & Reuse Hub',
+        description: 'Launch repair-first hubs with tool walls, collection bays, and sorting lines.',
+        requiredMaterials: { metal: 12, paper: 10, plastic: 12, wood: 8, glass: 5 },
+        progress: 0,
+        completed: false,
+        healthBonus: 13,
+        budgetBonus: 2850,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 23,
+      },
+      {
+        id: 'p-14',
+        name: 'Eco Market & Circular Trade Hall',
+        description: 'Construct a flagship circular economy market with high-capacity infrastructure.',
+        requiredMaterials: { glass: 16, wood: 14, paper: 11, plastic: 10, metal: 18 },
+        progress: 0,
+        completed: false,
+        healthBonus: 18,
+        budgetBonus: 4200,
+        scoreBonus: 0,
+        difficultyScore: 0,
+        estimatedExternalCost: 0,
+        deadline: 25,
+      }
     ];
+
+    return projects.map(project => {
+      const totalQuantity = Object.values(project.requiredMaterials).reduce(
+        (sum, value) => sum + (value || 0),
+        0
+      );
+      const estimatedExternalCost = Object.entries(project.requiredMaterials).reduce(
+        (sum, [material, qty]) => {
+          const weight = this.MATERIAL_COST_WEIGHTS[material as keyof typeof this.MATERIAL_COST_WEIGHTS] || 0;
+          return sum + (qty || 0) * weight;
+        },
+        0
+      );
+
+      const difficultyScore = Math.round(totalQuantity + estimatedExternalCost / 180);
+      const scoreBonus = Math.max(8, Math.round(difficultyScore * 1.35));
+
+      return {
+        ...project,
+        estimatedExternalCost,
+        difficultyScore,
+        scoreBonus,
+      };
+    });
   }
 
   static async getGameState(sessionId: string): Promise<GameState | null> {
@@ -545,6 +730,10 @@ export class GameService {
       teamBBudget: pairScore.teamBBudget,
       teamACO2: pairScore.teamACO2,
       teamBCO2: pairScore.teamBCO2,
+      teamAScore: pairScore.teamAScore ?? 0,
+      teamBScore: pairScore.teamBScore ?? 0,
+      winningTeam: pairScore.winningTeam ?? null,
+      scoreRanking: pairScore.scoreRanking ?? [],
       teamAGameStatus: pairScore.teamAGameStatus,
       teamBGameStatus: pairScore.teamBGameStatus,
       teamAPairStatus: pairScore.teamAPairStatus,
@@ -1012,6 +1201,22 @@ export class GameService {
     if (
       gameState.minutesElapsed >= this.constants.REAL_TIME_GAME_DURATION_MINUTES
     ) {
+      const calculateFinalTeamScore = (
+        health: number,
+        budget: number,
+        totalCO2: number,
+        teamScore: number
+      ): number => {
+        const healthComponent = Math.max(0, health) * 10;
+        const budgetComponent = Math.max(0, budget) / 1000;
+        const co2Penalty = Math.max(0, totalCO2) * 2;
+        const projectScoreComponent = Math.max(0, teamScore);
+        return parseFloat(
+          (healthComponent + budgetComponent + projectScoreComponent - co2Penalty).toFixed(2)
+        );
+      };
+
+      // Step 2: Calculate Pair Mean Health Score
       let averagePairHealth = 0;
       let teamAHealth = 0;
       let teamBHealth = 0;
@@ -1019,15 +1224,19 @@ export class GameService {
       let teamBBudget = 0;
       let teamACO2 = 0;
       let teamBCO2 = 0;
+      let teamAScoreBonus = 0;
+      let teamBScoreBonus = 0;
 
       if (gameState.teamRole === 'Team A') {
         teamAHealth = gameState.cityHealth;
         teamABudget = gameState.budget;
         teamACO2 = gameState.totalCO2;
+        teamAScoreBonus = gameState.teamScore || 0;
       } else if (gameState.teamRole === 'Team B') {
         teamBHealth = gameState.cityHealth;
         teamBBudget = gameState.budget;
         teamBCO2 = gameState.totalCO2;
+        teamBScoreBonus = gameState.teamScore || 0;
       }
 
       if (gameState.partnerSessionId) {
@@ -1040,10 +1249,12 @@ export class GameService {
               teamAHealth = partnerGameState.cityHealth;
               teamABudget = partnerGameState.budget;
               teamACO2 = partnerGameState.totalCO2;
+              teamAScoreBonus = partnerGameState.teamScore || 0;
             } else if (partnerGameState.teamRole === 'Team B') {
               teamBHealth = partnerGameState.cityHealth;
               teamBBudget = partnerGameState.budget;
               teamBCO2 = partnerGameState.totalCO2;
+              teamBScoreBonus = partnerGameState.teamScore || 0;
             }
 
             const pairStatus =
@@ -1069,6 +1280,57 @@ export class GameService {
         averagePairHealth = gameState.cityHealth;
       }
 
+      const teamAFinalScore = calculateFinalTeamScore(
+        teamAHealth,
+        teamABudget,
+        teamACO2,
+        teamAScoreBonus
+      );
+      const teamBFinalScore = calculateFinalTeamScore(
+        teamBHealth,
+        teamBBudget,
+        teamBCO2,
+        teamBScoreBonus
+      );
+
+      const bothTeamsNotEliminated =
+        (gameState.pairStatus || 'active') === 'active';
+
+      let winningTeam: 'Team A' | 'Team B' | 'Tie' | null = null;
+      if (bothTeamsNotEliminated) {
+        if (teamAFinalScore > teamBFinalScore) {
+          winningTeam = 'Team A';
+        } else if (teamBFinalScore > teamAFinalScore) {
+          winningTeam = 'Team B';
+        } else {
+          winningTeam = 'Tie';
+        }
+      }
+
+      const scoreRanking = [
+        {
+          rank: 1,
+          team: 'Team A' as const,
+          sessionId:
+            gameState.teamRole === 'Team A'
+              ? gameState.sessionId
+              : gameState.partnerSessionId || gameState.sessionId,
+          finalScore: teamAFinalScore,
+        },
+        {
+          rank: 2,
+          team: 'Team B' as const,
+          sessionId:
+            gameState.teamRole === 'Team B'
+              ? gameState.sessionId
+              : gameState.partnerSessionId || gameState.sessionId,
+          finalScore: teamBFinalScore,
+        },
+      ]
+        .sort((a, b) => b.finalScore - a.finalScore)
+        .map((row, index) => ({ ...row, rank: index + 1 }));
+
+      // Update pair results in database
       if (gameState.pairId) {
         try {
           let teamAGameStatus = 'complete';
@@ -1122,6 +1384,10 @@ export class GameService {
               teamBBudget: parseFloat(teamBBudget.toFixed(0)),
               teamACO2: parseFloat(teamACO2.toFixed(1)),
               teamBCO2: parseFloat(teamBCO2.toFixed(1)),
+              teamAScore: teamAFinalScore,
+              teamBScore: teamBFinalScore,
+              winningTeam,
+              scoreRanking,
               teamAGameStatus,
               teamBGameStatus,
               teamAPairStatus,
@@ -1148,17 +1414,21 @@ export class GameService {
       this.updateGameStatusFromPairStatus(gameState);
 
       gameState.activityLog.unshift(
-        `[GAME COMPLETE] Pair average health: ${averagePairHealth.toFixed(1)}%`
+        `[GAME COMPLETE] Team A Score: ${teamAFinalScore.toFixed(2)} | Team B Score: ${teamBFinalScore.toFixed(2)}`
       );
 
       WebSocketService.broadcastSystemMessage(
         sessionId,
-        `Game Complete! Your Pair's Final Score: ${averagePairHealth.toFixed(1)}%`,
+        `Game Complete! Team A: ${teamAFinalScore.toFixed(2)} | Team B: ${teamBFinalScore.toFixed(2)}`,
         'info'
       );
 
       WebSocketService.emitToGameRoom(sessionId, 'game-complete', {
         pairAverageHealth: averagePairHealth,
+        teamAFinalScore,
+        teamBFinalScore,
+        winningTeam,
+        scoreRanking,
         teamAHealth,
         teamBHealth,
         teamABudget: parseFloat(teamABudget.toFixed(0)),
@@ -1173,6 +1443,10 @@ export class GameService {
           'game-complete',
           {
             pairAverageHealth: averagePairHealth,
+            teamAFinalScore,
+            teamBFinalScore,
+            winningTeam,
+            scoreRanking,
             teamAHealth,
             teamBHealth,
             teamABudget: parseFloat(teamABudget.toFixed(0)),
