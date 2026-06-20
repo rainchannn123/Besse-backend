@@ -9,12 +9,43 @@ import {
   rejectWaste,
 } from '../controllers/municipalityController';
 import { protect } from '../middleware/auth';
-import { collectWasteSchema, collectWasteTransportSchema, constructProjectSchema } from '../types';
 import { validate } from '../utils/validation';
+import { z } from 'zod';
 
 const router = Router();
 
 router.use(protect);
+
+// ✅ Define schemas inline
+const collectWasteSchema = z.object({
+  body: z.object({
+    batchId: z.string().min(1, 'Batch ID is required'),
+  }),
+  params: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
+
+const collectWasteTransportSchema = z.object({
+  body: z.object({
+    batchId: z.string().min(1, 'Batch ID is required'),
+    mode: z.enum(['fast', 'slow']),
+  }),
+  params: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
+
+const constructProjectSchema = z.object({
+  body: z.object({
+    projectId: z.string().min(1, 'Project ID is required'),
+    materialType: z.enum(['paper', 'plastic', 'metal', 'glass', 'wood']),
+    materialAmount: z.number().positive('Material amount must be positive'),
+  }),
+  params: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
 
 /**
  * @swagger
@@ -24,32 +55,6 @@ router.use(protect);
  *     tags: [Municipality]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - batchId
- *             properties:
- *               batchId:
- *                 type: string
- *                 example: batch123
- *     responses:
- *       200:
- *         description: Waste collected successfully
- *       403:
- *         description: Only municipality player can collect waste
- *       404:
- *         description: Game session not found
  */
 router.post(
   '/collect-waste/:sessionId',
@@ -65,37 +70,6 @@ router.post(
  *     tags: [Municipality]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - batchId
- *               - mode
- *             properties:
- *               batchId:
- *                 type: string
- *                 example: batch123
- *               mode:
- *                 type: string
- *                 enum: [fast, slow]
- *                 example: fast
- *     responses:
- *       200:
- *         description: Transport started successfully
- *       403:
- *         description: Only municipality player can collect waste
- *       404:
- *         description: Game session not found
  */
 router.post(
   '/collect-waste-transport/:sessionId',
@@ -111,18 +85,6 @@ router.post(
  *     tags: [Municipality]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     responses:
- *       200:
- *         description: Waste batches retrieved successfully
- *       403:
- *         description: Only municipality player can view waste batches
  */
 router.get('/waste-batches/:sessionId', getWasteBatches);
 
@@ -134,18 +96,6 @@ router.get('/waste-batches/:sessionId', getWasteBatches);
  *     tags: [Municipality]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     responses:
- *       200:
- *         description: City projects retrieved successfully
- *       403:
- *         description: Only municipality player can view city projects
  */
 router.get('/city-projects/:sessionId', getCityProjects);
 
@@ -157,39 +107,6 @@ router.get('/city-projects/:sessionId', getCityProjects);
  *     tags: [Municipality]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - projectId
- *               - materialType
- *               - materialAmount
- *             properties:
- *               projectId:
- *                 type: string
- *                 example: p-1
- *               materialType:
- *                 type: string
- *                 enum: [paper, plastic, metal, glass, wood]
- *                 example: paper
- *               materialAmount:
- *                 type: number
- *                 example: 10
- *     responses:
- *       200:
- *         description: Material contributed to project successfully
- *       403:
- *         description: Only municipality player can construct projects
  */
 router.post(
   '/construct-project/:sessionId',
@@ -205,20 +122,6 @@ router.post(
  *     tags: [Municipality]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     responses:
- *       200:
- *         description: Municipality inventory retrieved successfully
- *       403:
- *         description: Only municipality player can view inventory
- *       404:
- *         description: Game session not found
  */
 router.get('/inventory/:sessionId', getMunicipalityInventory);
 

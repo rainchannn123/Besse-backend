@@ -83,4 +83,7 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   MARKUP_CONSTANT: 2,
 
   REFUSE_HEALTH_PENALTY_PER_TON: 0.5,
+
+  // ✅ NEW: Per-team timer (15 minutes)
+  TEAM_GAME_DURATION_MINUTES: 15,
 };

@@ -88,7 +88,6 @@ export class LobbyService {
   static async createLobby(userId: string, userName: string, gameMode: GameMode = 'waste'): Promise<ILobby> {
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // ✅ Clear any existing session first
     await User.findByIdAndUpdate(userId, { currentSession: null });
 
     const newSessionId = uuidv4();
@@ -123,16 +122,12 @@ export class LobbyService {
   ): Promise<ILobby> {
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // ✅ Check if user already has a current session
     const existingUser = await User.findById(userId);
     if (existingUser?.currentSession) {
-      // Check if the session still exists
       const existingLobby = await Lobby.findOne({ sessionId: existingUser.currentSession });
       if (existingLobby) {
-        // User is already in a valid lobby
         return existingLobby;
       } else {
-        // Session is orphaned - clear it
         await User.findByIdAndUpdate(userId, { currentSession: null });
       }
     }
@@ -181,7 +176,6 @@ export class LobbyService {
       p => p.userId.toString() === userId
     );
     if (existingPlayer) {
-      // User is already in this lobby - return it instead of error
       return lobby;
     }
 
@@ -200,6 +194,52 @@ export class LobbyService {
     await lobby.save();
 
     await this.broadcastLobbyState(lobby.sessionId, 'player-joined');
+
+    // ✅ FIX: Update matchmaking room if team already has a room
+    try {
+      const MatchmakingRoom = require('../models/MatchmakingRoom').default;
+      const matchmakingRoom = await MatchmakingRoom.findOne({
+        'teams.sessionId': lobby.sessionId,
+        status: { $in: ['waiting', 'ready'] },
+      });
+
+      if (matchmakingRoom) {
+        console.log(`[LobbyService] Updating matchmaking room for team: ${lobby.sessionId}`);
+        
+        const teamIndex = matchmakingRoom.teams.findIndex(
+          (t: any) => t.sessionId === lobby.sessionId
+        );
+        
+        if (teamIndex !== -1) {
+          const { MatchmakingService } = require('./matchmakingService');
+          
+          const playersWithRoles = lobby.players.map((p: any) => ({
+            userId: p.userId.toString(),
+            name: p.name,
+            role: p.selectedRole,
+          }));
+          
+          console.log(`[LobbyService] Players in lobby:`, playersWithRoles);
+          
+          const sortedPlayers = MatchmakingService.sortPlayersByRole(playersWithRoles);
+          
+          console.log(`[LobbyService] Sorted players:`, sortedPlayers);
+          
+          matchmakingRoom.teams[teamIndex].players = sortedPlayers;
+          await matchmakingRoom.save();
+          
+          // Broadcast seating update to all team members
+          for (const member of lobby.players) {
+            WebSocketService.emitToGameRoom(member.userId.toString(), 'room:seating:update', {
+              roomCode: matchmakingRoom.roomCode,
+              teams: matchmakingRoom.teams,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[LobbyService] Error updating matchmaking room:', error);
+    }
 
     return lobby;
   }
@@ -384,7 +424,6 @@ export class LobbyService {
     const lobby = await Lobby.findOne({ sessionId });
     const currentSessionCleared = user.currentSession === sessionId;
 
-    // ✅ ALWAYS clear currentSession for this user
     if (currentSessionCleared || !lobby) {
       await User.findByIdAndUpdate(userId, { currentSession: null });
     }
@@ -432,7 +471,6 @@ export class LobbyService {
 
     lobby.players = lobby.players.filter(p => !p.userId.equals(userObjectId));
 
-    // ✅ Ensure session is cleared (already done above but double-check)
     await User.findByIdAndUpdate(userId, { currentSession: null });
 
     if (lobby.players.length === 0) {
@@ -480,9 +518,6 @@ export class LobbyService {
       lobbyState,
     };
   }
-
-  // ... rest of the file remains the same (startGame, getAvailableLobbies, pairing methods, etc.)
-  // I'll keep the remaining methods as they were since they don't need changes
 
   static async startGame(sessionId: string): Promise<ILobby> {
     const lobby = await Lobby.findOne({ sessionId, status: 'ready' });

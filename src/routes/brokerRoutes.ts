@@ -7,12 +7,27 @@ import {
   getExternalStock,
 } from '../controllers/brokerController';
 import { protect } from '../middleware/auth';
-import { placeBidSchema, buyFromExternalWholesalerSchema } from '../types';
 import { validate } from '../utils/validation';
+import { z } from 'zod';
 
 const router = Router();
 
 router.use(protect);
+
+// ✅ Define schemas inline
+const placeBidSchema = z.object({
+  body: z.object({
+    auctionId: z.string().min(1, 'Auction ID is required'),
+  }),
+});
+
+const buyFromExternalWholesalerSchema = z.object({
+  body: z.object({
+    materialType: z.enum(['paper', 'plastic', 'metal', 'glass', 'wood']),
+    requestedAmount: z.number().positive('Amount must be positive'),
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
 
 /**
  * @swagger
@@ -22,11 +37,6 @@ router.use(protect);
  *     tags: [Broker]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Active auctions retrieved successfully
- *       403:
- *         description: Only broker player can view auctions
  */
 router.get('/auctions', getActiveAuctions);
 
@@ -38,23 +48,6 @@ router.get('/auctions', getActiveAuctions);
  *     tags: [Broker]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - auctionId
- *             properties:
- *               auctionId:
- *                 type: string
- *                 example: a-123
- *     responses:
- *       200:
- *         description: Bid placed successfully
- *       403:
- *         description: Only broker player can place bids
  */
 router.post('/place-bid', validate(placeBidSchema), placeBid);
 
@@ -62,22 +55,10 @@ router.post('/place-bid', validate(placeBidSchema), placeBid);
  * @swagger
  * /api/broker/resolve-auctions/{sessionId}:
  *   post:
- *     summary: Resolve expired auctions (typically called by system, but available for broker)
+ *     summary: Resolve expired auctions
  *     tags: [Broker]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     responses:
- *       200:
- *         description: Expired auctions resolved successfully
- *       403:
- *         description: Only broker player can resolve auctions
  */
 router.post('/resolve-auctions/:sessionId', resolveExpiredAuctions);
 
@@ -89,32 +70,6 @@ router.post('/resolve-auctions/:sessionId', resolveExpiredAuctions);
  *     tags: [Broker]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - materialType
- *               - requestedAmount
- *               - sessionId
- *             properties:
- *               materialType:
- *                 type: enum
- *                 enum: [paper, plastic, metal, glass, wood]
- *                 example: paper
- *               requestedAmount:
- *                 type: number
- *                 example: 10
- *               sessionId:
- *                 type: string
- *                 example: ABC123
- *     responses:
- *       200:
- *         description: Purchase from external wholesaler successful
- *       403:
- *         description: Only broker player can buy from external wholesaler
  */
 router.post(
   '/buy-external',
@@ -130,18 +85,6 @@ router.post(
  *     tags: [Broker]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: sessionId
- *         required: true
- *         schema:
- *           type: string
- *         example: ABC123
- *     responses:
- *       200:
- *         description: External stock retrieved successfully
- *       403:
- *         description: Only broker player can view external stock
  */
 router.get('/external-stock/:sessionId', getExternalStock);
 

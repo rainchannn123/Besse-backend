@@ -5,24 +5,36 @@ import { BuyFromExternalWholesalerInput, PlaceBidInput } from '../types';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendResponse } from '../utils/response';
 
-// NEW: Get active auctions scoped to the player's pair (own session + partner)
+// ✅ Get active auctions scoped to the player's room
 export const getActiveAuctions = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user._id;
     const currentSession = (req as any).user.currentSession;
 
-    // Get only the sessions belonging to this player's pair
-    const pairedStates = await GameService.getPairedGameStates(userId, currentSession);
-    const isBroker = pairedStates.some(
-      gs => gs.players.broker.toString() === userId.toString()
+    if (!currentSession) {
+      sendResponse(res, 400, 'No active session found');
+      return;
+    }
+
+    // ✅ Get game state and check if user is a broker
+    const gameState = await GameService.getGameState(currentSession);
+    if (!gameState) {
+      sendResponse(res, 404, 'Game session not found');
+      return;
+    }
+
+    // ✅ Check if user is broker in their team
+    const team = gameState.teams.find(t => 
+      t.players.broker === userId.toString()
     );
 
-    if (!isBroker) {
+    if (!team) {
       sendResponse(res, 403, 'Only broker player can view auctions');
       return;
     }
 
-    const auctions = BrokerService.getActiveAuctionsFromStates(pairedStates);
+    // ✅ Get auctions from ALL teams in the room
+    const auctions = await BrokerService.getRoomAuctions(currentSession);
 
     sendResponse(res, 200, 'Active auctions retrieved successfully', {
       auctions,
@@ -30,65 +42,76 @@ export const getActiveAuctions = asyncHandler(
   }
 );
 
-// NEW: Place bid on auction
+// ✅ Place bid on auction
 export const placeBid = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { auctionId }: PlaceBidInput = req.body;
     const userId = (req as any).user._id;
     const currentSession = (req as any).user.currentSession;
 
-    // Get only the sessions belonging to this player's pair
-    const pairedStates = await GameService.getPairedGameStates(userId, currentSession);
-    const isBroker = pairedStates.some(
-      gs => gs.players.broker.toString() === userId.toString()
+    if (!currentSession) {
+      sendResponse(res, 400, 'No active session found');
+      return;
+    }
+
+    // ✅ Check if user is broker
+    const gameState = await GameService.getGameState(currentSession);
+    if (!gameState) {
+      sendResponse(res, 404, 'Game session not found');
+      return;
+    }
+
+    const team = gameState.teams.find(t => 
+      t.players.broker === userId.toString()
     );
 
-    if (!isBroker) {
+    if (!team) {
       sendResponse(res, 403, 'Only broker player can place bids');
       return;
     }
 
-    // Find the bidder's session
-    const bidderSession = pairedStates.find(
-      gs => gs.players.broker.toString() === userId.toString()
-    );
-
-    if (!bidderSession) {
-      sendResponse(res, 404, 'Bidder session not found');
-      return;
-    }
-
-    const gameState = await BrokerService.placeBid(
-      bidderSession.sessionId,
+    // ✅ Place bid
+    const updatedTeam = await BrokerService.placeBid(
+      currentSession,
       auctionId,
       userId
     );
 
-    sendResponse(res, 200, 'Bid placed successfully', { gameState });
+    sendResponse(res, 200, 'Bid placed successfully', { team: updatedTeam });
   }
 );
 
-// NEW: Resolve expired auctions (admin/system call, but allowing broker for now)
+// ✅ Resolve expired auctions
 export const resolveExpiredAuctions = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    const userRole = await GameService.getPlayerRole(sessionId, userId);
-    if (userRole !== 'broker') {
+    // ✅ Check if user is broker
+    const gameState = await GameService.getGameState(sessionId);
+    if (!gameState) {
+      sendResponse(res, 404, 'Game session not found');
+      return;
+    }
+
+    const team = gameState.teams.find(t => 
+      t.players.broker === userId.toString()
+    );
+
+    if (!team) {
       sendResponse(res, 403, 'Only broker player can resolve auctions');
       return;
     }
 
-    const gameState = await BrokerService.resolveExpiredAuctions(sessionId);
+    const updatedTeam = await BrokerService.resolveExpiredAuctions(sessionId);
 
     sendResponse(res, 200, 'Expired auctions resolved successfully', {
-      gameState,
+      team: updatedTeam,
     });
   }
 );
 
-// NEW: Buy from external wholesaler
+// ✅ Buy from external wholesaler
 export const buyFromExternalWholesaler = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const {
@@ -98,17 +121,28 @@ export const buyFromExternalWholesaler = asyncHandler(
     }: BuyFromExternalWholesalerInput = req.body;
     const userId = (req as any).user._id;
 
-    const userRole = await GameService.getPlayerRole(sessionId, userId);
-    if (userRole !== 'broker') {
-      sendResponse(
-        res,
-        403,
-        'Only broker player can buy from external wholesaler'
-      );
+    if (!sessionId) {
+      sendResponse(res, 400, 'Session ID is required');
       return;
     }
 
-    const gameState = await BrokerService.buyFromExternalWholesaler(
+    // ✅ Check if user is broker
+    const gameState = await GameService.getGameState(sessionId);
+    if (!gameState) {
+      sendResponse(res, 404, 'Game session not found');
+      return;
+    }
+
+    const team = gameState.teams.find(t => 
+      t.players.broker === userId.toString()
+    );
+
+    if (!team) {
+      sendResponse(res, 403, 'Only broker player can buy from external wholesaler');
+      return;
+    }
+
+    const updatedTeam = await BrokerService.buyFromExternalWholesaler(
       sessionId,
       materialType,
       requestedAmount,
@@ -116,19 +150,34 @@ export const buyFromExternalWholesaler = asyncHandler(
     );
 
     sendResponse(res, 200, 'Purchase from external wholesaler successful', {
-      gameState,
+      team: updatedTeam,
     });
   }
 );
 
-// NEW: Get external stock status
+// ✅ Get external stock status
 export const getExternalStock = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    const userRole = await GameService.getPlayerRole(sessionId, userId);
-    if (userRole !== 'broker') {
+    if (!sessionId) {
+      sendResponse(res, 400, 'Session ID is required');
+      return;
+    }
+
+    // ✅ Check if user is broker
+    const gameState = await GameService.getGameState(sessionId);
+    if (!gameState) {
+      sendResponse(res, 404, 'Game session not found');
+      return;
+    }
+
+    const team = gameState.teams.find(t => 
+      t.players.broker === userId.toString()
+    );
+
+    if (!team) {
       sendResponse(res, 403, 'Only broker player can view external stock');
       return;
     }

@@ -14,9 +14,9 @@ import authRoutes from './routes/authRoutes';
 import brokerRoutes from './routes/brokerRoutes';
 import gameRoutes from './routes/gameRoutes';
 import lobbyRoutes from './routes/lobbyRoutes';
+import matchmakingRoutes from './routes/matchmakingRoutes';
 import mrfRoutes from './routes/mrfRoutes';
 import municipalityRoutes from './routes/municipalityRoutes';
-import waitingRoomRoutes from './routes/waitingRoomRoutes';
 import { GameService } from './services/gameService';
 import { LobbyService } from './services/lobbyService';
 import { WebSocketService } from './services/websocketService';
@@ -39,10 +39,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Logging
 app.use(requestLogger);
 
-// Rate limiting (commented out)
-// app.use('/api/auth', authLimiter);
-// app.use('/api/', generalLimiter);
-
 // API Routes - ALL routes go here (after body parsing)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -51,7 +47,8 @@ app.use('/api/games', gameRoutes);
 app.use('/api/municipality', municipalityRoutes);
 app.use('/api/mrf', mrfRoutes);
 app.use('/api/broker', brokerRoutes);
-app.use('/api/waiting-rooms', waitingRoomRoutes);
+
+app.use('/api/matchmaking', matchmakingRoutes);
 
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
@@ -130,19 +127,19 @@ setInterval(async () => {
   }
 }, SYSTEM_CHECK_INTERVAL);
 
-// Pairing scheduler
-setInterval(async () => {
-  try {
-    const pairs = await LobbyService.checkAndCreatePairs();
-    if (pairs && pairs.length > 0) {
-      logger.info(
-        `Created ${pairs.length} pair(s): ${pairs.map(p => p.pairId).join(', ')}`
-      );
-    }
-  } catch (err) {
-    logger.error('Error during pairing scheduler', err);
-  }
-}, SYSTEM_CHECK_INTERVAL);
+// Pairing scheduler - Commented out (replaced by matchmaking)
+// setInterval(async () => {
+//   try {
+//     const pairs = await LobbyService.checkAndCreatePairs();
+//     if (pairs && pairs.length > 0) {
+//       logger.info(
+//         `Created ${pairs.length} pair(s): ${pairs.map(p => p.pairId).join(', ')}`
+//       );
+//     }
+//   } catch (err) {
+//     logger.error('Error during pairing scheduler', err);
+//   }
+// }, SYSTEM_CHECK_INTERVAL);
 
 // Countdown broadcaster
 setInterval(async () => {
@@ -154,7 +151,10 @@ setInterval(async () => {
 
     for (const session of gamesWithCountdown) {
       const gameState = session.gameState;
+      
+      // ✅ FIX: Check if gameOverCountdown exists before accessing
       if (
+        gameState.gameOverCountdown && 
         gameState.gameOverCountdown.active &&
         gameState.gameOverCountdown.startTime
       ) {
@@ -162,11 +162,14 @@ setInterval(async () => {
         const elapsed = (now - gameState.gameOverCountdown.startTime) / 1000;
         const timeRemaining = Math.max(
           0,
-          gameState.constants.COUNTDOWN_DURATION_SECONDS - elapsed
+          (gameState.constants?.COUNTDOWN_DURATION_SECONDS || 30) - elapsed
         );
 
         if (timeRemaining > 0) {
-          const teamLabel = gameState.teamRole === 'Team A' ? 'A' : 'B';
+          // ✅ Get team info from teams array
+          const team = gameState.teams?.find((t: any) => t.sessionId === session.sessionId);
+          const teamLabel = team ? `City ${team.citySlot}` : 'Unknown';
+          
           WebSocketService.broadcastSystemMessage(
             session.sessionId,
             `GAME OVER of TEAM ${teamLabel} IN ${Math.ceil(timeRemaining)} SECONDS`,
