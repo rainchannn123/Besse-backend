@@ -9,8 +9,11 @@ export const processWaste = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { queueId, sessionId }: ProcessWasteInput = req.body;
     const userId = (req as any).user._id;
-    // Verify user has MRF role
+    
+    // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
+    console.log('[processWaste] User role:', userRole);
+    
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can process waste');
       return;
@@ -28,8 +31,10 @@ export const assignGrade = asyncHandler(
       req.body;
     const userId = (req as any).user._id;
 
-    // Verify user has MRF role
+    // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
+    console.log('[assignGrade] User role:', userRole);
+    
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can assign grades');
       return;
@@ -53,21 +58,23 @@ export const getQueue = asyncHandler(
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has MRF role
+    // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
+    console.log('[getQueue] User role:', userRole);
+    
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can view queue');
       return;
     }
 
-    const gameState = await GameService.getGameState(sessionId);
-
-    if (!gameState) {
-      sendResponse(res, 404, 'Game session not found');
+    // ✅ Get team data
+    const team = await GameService.getTeamData(sessionId);
+    if (!team) {
+      sendResponse(res, 404, 'Team not found');
       return;
     }
 
-    const queue = gameState.mrfQueue.filter(item => !item.delivered);
+    const queue = team.mrfQueue.filter(item => !item.delivered);
 
     sendResponse(res, 200, 'MRF queue retrieved successfully', { queue });
   }
@@ -78,21 +85,23 @@ export const getMRFInventory = asyncHandler(
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has MRF role
+    // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
+    console.log('[getMRFInventory] User role:', userRole);
+    
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can view MRF inventory');
       return;
     }
 
-    const gameState = await GameService.getGameState(sessionId);
-
-    if (!gameState) {
-      sendResponse(res, 404, 'Game session not found');
+    // ✅ Get team data
+    const team = await GameService.getTeamData(sessionId);
+    if (!team) {
+      sendResponse(res, 404, 'Team not found');
       return;
     }
 
-    const inventory = gameState.materialInventory.filter(
+    const inventory = team.materialInventory.filter(
       item => item.owner === 'mrf'
     );
 
@@ -102,28 +111,30 @@ export const getMRFInventory = asyncHandler(
   }
 );
 
-// NEW: Get pending auctions for MRF to assign grades and prices
+// ✅ NEW: Get pending auctions for MRF to assign grades and prices
 export const getPendingAuctions = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    // Verify user has MRF role
+    // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
+    console.log('[getPendingAuctions] User role:', userRole);
+    
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can view pending auctions');
       return;
     }
 
-    const gameState = await GameService.getGameState(sessionId);
-
-    if (!gameState) {
-      sendResponse(res, 404, 'Game session not found');
+    // ✅ Get team data
+    const team = await GameService.getTeamData(sessionId);
+    if (!team) {
+      sendResponse(res, 404, 'Team not found');
       return;
     }
 
     // Get pending auctions owned by this team
-    const pendingAuctions = gameState.marketplaceListing.filter(
+    const pendingAuctions = team.marketplaceListing.filter(
       auction =>
         auction.status === 'pending' && auction.originTeam === sessionId
     );

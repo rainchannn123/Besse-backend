@@ -8,41 +8,15 @@ import { GameState } from '../types';
 import { logger } from '../utils/logger';
 import { GameService } from './gameService';
 import Lobby from '../models/Lobby';
+import MatchmakingRoom from '../models/MatchmakingRoom';
 
 export class WebSocketService {
   private static io: SocketIOServer;
-  private static gameRooms: Map<string, Set<string>> = new Map(); // sessionId -> Set of socketIds
-
-  private static getTeamRoomName(sessionId: string, teamRole?: string | null): string | null {
-    if (!teamRole) return null;
-    const normalizedRole = String(teamRole).trim().toLowerCase().replace(/\s+/g, '-');
-    return `${sessionId}:team:${normalizedRole}`;
-  }
-
-  private static getPlayerTeamRoleFromSession(
-    gameState: GameState | null,
-    userId?: string
-  ): 'Team A' | 'Team B' | null {
-    if (!gameState || !userId || !gameState.partnerSessionId) return null;
-
-    const playerIds = [
-      gameState.players?.municipality,
-      gameState.players?.mrf,
-      gameState.players?.broker,
-    ].filter(Boolean) as string[];
-
-    const isInCurrentSession = playerIds.includes(userId);
-    if (!isInCurrentSession) return null;
-
-    return (gameState.teamRole as 'Team A' | 'Team B' | null) || null;
-  }
+  private static gameRooms: Map<string, Set<string>> = new Map();
 
   static initialize(io: SocketIOServer) {
     this.io = io;
-
-    // Use authentication middleware
     io.use(socketAuthMiddleware);
-
     this.setupSocketHandlers();
   }
 
@@ -52,7 +26,6 @@ export class WebSocketService {
         `Client connected: ${socket.id} (User: ${socket.user?.name})`
       );
 
-      // Handle joining a game room
       socket.on('join-game', async (data: { sessionId: string }) => {
         const { sessionId } = data;
 
@@ -61,7 +34,6 @@ export class WebSocketService {
         );
 
         try {
-          // Validate user has access to this game
           const hasAccess = await validateGameAccess(socket, sessionId);
           if (!hasAccess) {
             logger.warn(
@@ -73,7 +45,6 @@ export class WebSocketService {
             return;
           }
 
-          // Leave any existing rooms
           socket.rooms.forEach(room => {
             if (room !== socket.id) {
               logger.info(
@@ -83,7 +54,6 @@ export class WebSocketService {
             }
           });
 
-          // Join the game room
           socket.join(sessionId);
 
           // Join team-specific room for teammate-only chat
@@ -97,7 +67,6 @@ export class WebSocketService {
             );
           }
 
-          // Track socket in game room
           if (!this.gameRooms.has(sessionId)) {
             this.gameRooms.set(sessionId, new Set());
           }
@@ -107,7 +76,6 @@ export class WebSocketService {
             `[WebSocket] ✅ User ${socket.user?.name} (${socket.userId}) JOINED game room: ${sessionId}. Room has ${this.gameRooms.get(sessionId)!.size} users`
           );
 
-          // Send confirmation
           socket.emit('joined-game', {
             sessionId,
             userId: socket.userId,
@@ -119,13 +87,134 @@ export class WebSocketService {
         }
       });
 
-      // Handle leaving a game room
+      socket.on('join-matchmaking-room', async (data: { roomCode: string }) => {
+        const { roomCode } = data;
+        const userId = socket.userId!;
+
+        logger.info(
+          `[WebSocket] join-matchmaking-room event received: roomCode=${roomCode}, userId=${userId}`
+        );
+
+        try {
+          const room = await MatchmakingRoom.findOne({ roomCode: roomCode.toUpperCase() });
+          if (!room) {
+            socket.emit('error', { message: 'Room not found' });
+            return;
+          }
+
+          const isInRoom = room.teams.some(t =>
+            t.players.some(p => p.userId === userId)
+          );
+
+          if (!isInRoom) {
+            socket.emit('error', { message: 'You are not in this room' });
+            return;
+          }
+
+          const roomSocketId = `matchmaking-${roomCode}`;
+          socket.join(roomSocketId);
+
+          this.emitToMatchmakingRoom(roomCode, 'room:seating:update', {
+            roomCode: room.roomCode,
+            teams: room.teams.map(t => ({
+              citySlot: t.citySlot,
+              players: t.players.map(p => ({
+                userId: p.userId,
+                name: p.name,
+                role: p.role,
+                isLeader: p.isLeader,
+              })),
+              isReady: t.isReady,
+            })),
+          });
+
+          socket.emit('joined-matchmaking-room', {
+            roomCode: room.roomCode,
+          });
+
+          logger.info(
+            `[WebSocket] ✅ User ${socket.user?.name} (${userId}) JOINED matchmaking room: ${roomCode}`
+          );
+        } catch (error) {
+          logger.error('[WebSocket] Error joining matchmaking room:', error);
+          socket.emit('error', { message: 'Failed to join matchmaking room' });
+        }
+      });
+
+      socket.on('leave-matchmaking-room', async (data: { roomCode: string }) => {
+        const { roomCode } = data;
+        const roomSocketId = `matchmaking-${roomCode}`;
+        socket.leave(roomSocketId);
+
+        logger.info(
+          `[WebSocket] User ${socket.user?.name} left matchmaking room: ${roomCode}`
+        );
+      });
+
+      socket.on('room:ready-toggle', async (data: { roomCode: string; sessionId: string }) => {
+        const { roomCode, sessionId } = data;
+        const userId = socket.userId!;
+
+        try {
+          const room = await MatchmakingRoom.findOne({ roomCode: roomCode.toUpperCase() });
+          if (!room) {
+            socket.emit('error', { message: 'Room not found' });
+            return;
+          }
+
+          const team = room.teams.find(t => t.sessionId === sessionId);
+          if (!team) {
+            socket.emit('error', { message: 'Team not found' });
+            return;
+          }
+
+          const isLeader = team.players.some(p => p.userId === userId && p.isLeader);
+          if (!isLeader) {
+            socket.emit('error', { message: 'Only team leader can toggle ready' });
+            return;
+          }
+
+          team.isReady = !team.isReady;
+          await room.save();
+
+          this.emitToMatchmakingRoom(roomCode, 'room:seating:update', {
+            roomCode: room.roomCode,
+            teams: room.teams.map(t => ({
+              citySlot: t.citySlot,
+              players: t.players.map(p => ({
+                userId: p.userId,
+                name: p.name,
+                role: p.role,
+                isLeader: p.isLeader,
+              })),
+              isReady: t.isReady,
+            })),
+          });
+
+          const allReady = room.teams.every(t => t.isReady === true);
+          const hasMinimumTeams = room.teams.length >= 2;
+
+          if (allReady && hasMinimumTeams) {
+            this.emitToMatchmakingRoom(roomCode, 'room:all-ready', {
+              roomCode: room.roomCode,
+              message: 'All teams are ready!',
+            });
+          }
+
+          logger.info(
+            `[WebSocket] Team ${sessionId} in room ${roomCode} ready status: ${team.isReady}`
+          );
+        } catch (error) {
+          logger.error('[WebSocket] Error toggling ready status:', error);
+          socket.emit('error', { message: 'Failed to toggle ready status' });
+        }
+      });
+
       socket.on('leave-game', (data: { sessionId: string }) => {
         const { sessionId } = data;
 
         socket.leave(sessionId);
 
-        // Remove from tracking
         const roomSockets = this.gameRooms.get(sessionId);
         if (roomSockets) {
           roomSockets.delete(socket.id);
@@ -137,7 +226,6 @@ export class WebSocketService {
         logger.warn(`User ${socket.user?.name} left game room: ${sessionId}`);
       });
 
-      // Handle surrender vote toggle
       socket.on('surrender-toggle', async (data: { sessionId: string }) => {
         const { sessionId } = data;
         const playerId = socket.userId!;
@@ -155,58 +243,67 @@ export class WebSocketService {
             return;
           }
 
-          // Only available after 15 minutes of play
-          if ((gameState.minutesElapsed || 0) < 15) {
+          // ✅ Find team
+          const team = gameState.teams?.find(t => t.sessionId === sessionId);
+          if (!team) {
+            socket.emit('error', { message: 'Team not found' });
+            return;
+          }
+
+          const minutesElapsed = team.minutesElapsed || 0;
+
+          if (minutesElapsed < 15) {
             socket.emit('surrender-error', {
               message: 'Surrender is only available after 15 minutes of play',
             });
             return;
           }
 
-          // Initialize if missing (backward compat)
-          if (!gameState.surrenderVotes) gameState.surrenderVotes = [];
+          if (!team.surrenderVotes) {
+            team.surrenderVotes = [];
+          }
 
-          const voteIndex = gameState.surrenderVotes.indexOf(playerId);
+          const surrenderVotes = team.surrenderVotes;
+          const voteIndex = surrenderVotes.indexOf(playerId);
           if (voteIndex === -1) {
-            gameState.surrenderVotes.push(playerId);
+            surrenderVotes.push(playerId);
             logger.info(`[Surrender] ${socket.user?.name} voted to surrender in session ${sessionId}`);
           } else {
-            gameState.surrenderVotes.splice(voteIndex, 1);
+            surrenderVotes.splice(voteIndex, 1);
             logger.info(`[Surrender] ${socket.user?.name} withdrew surrender vote in session ${sessionId}`);
           }
 
-          const totalVotes = gameState.surrenderVotes.length;
+          const totalVotes = surrenderVotes.length;
 
-          // Check if all 3 players surrendered
+          // ✅ Check if all 3 players voted
           if (totalVotes >= 3) {
-            gameState.gameStatus = 'lost';
-            gameState.activityLog.unshift('[SURRENDER] All players have surrendered. The game has ended.');
-
-            // Update pair status
-            if (gameState.teamRole === 'Team A') {
-              gameState.pairStatus = 'team_a_eliminated';
-            } else if (gameState.teamRole === 'Team B') {
-              gameState.pairStatus = 'team_b_eliminated';
+            team.gameStatus = 'eliminated';
+            team.isEliminated = true;
+            // ✅ Use a valid reason type
+            team.eliminationReason = 'budget'; // Use existing type instead of 'surrender'
+            if (team.activityLog) {
+              team.activityLog.unshift('[SURRENDER] All players have surrendered. The team has been eliminated.');
             }
 
-            // Mark lobby as completed
-            await Lobby.findOneAndUpdate({ sessionId }, { status: 'completed' });
-
+            await GameService.updateTeamData(sessionId, team);
             await GameService.updateGameState(sessionId, gameState);
 
-            // Broadcast final game state so all players route to game-over
-            this.emitToGameRoom(sessionId, 'game-state-full', {
-              gameState,
-              actionType: 'surrender',
-              surrenderVotes: gameState.surrenderVotes,
-              totalVotes,
-            });
+            // Broadcast to all teams in the room
+            for (const t of gameState.teams) {
+              this.emitToGameRoom(t.sessionId, 'game-state-full', {
+                gameState,
+                actionType: 'surrender',
+                surrenderVotes,
+                totalVotes,
+                teamId: team.teamId,
+              });
+            }
           } else {
-            await GameService.updateGameState(sessionId, gameState);
+            await GameService.updateTeamData(sessionId, team);
 
-            // Broadcast updated vote count to all players in the session
+            // Broadcast updated vote count to all players in the team's session
             this.emitToGameRoom(sessionId, 'surrender-update', {
-              surrenderVotes: gameState.surrenderVotes,
+              surrenderVotes,
               totalVotes,
             });
           }
@@ -254,13 +351,11 @@ export class WebSocketService {
         }
       });
 
-      // Handle disconnection
       socket.on('disconnect', () => {
         logger.warn(
           `Client disconnected: ${socket.id} (User: ${socket.user?.name})`
         );
 
-        // Clean up from all rooms
         this.gameRooms.forEach((sockets, sessionId) => {
           if (sockets.has(socket.id)) {
             sockets.delete(socket.id);
@@ -305,6 +400,36 @@ export class WebSocketService {
   }
 
   /**
+   * Send specific event to all players in a matchmaking room
+   */
+  static emitToMatchmakingRoom(roomCode: string, event: string, data: any) {
+    const roomSocketId = `matchmaking-${roomCode}`;
+    logger.info(
+      `[WebSocket] Broadcasting '${event}' to matchmaking room '${roomCode}'`
+    );
+
+    this.io.to(roomSocketId).emit(event, {
+      ...data,
+      roomCode,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Broadcast to ALL connected clients
+   */
+  static broadcastToAll(event: string, data: any) {
+    logger.info(
+      `[WebSocket] Broadcasting '${event}' to ALL connected clients`
+    );
+
+    this.io.emit(event, {
+      ...data,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * Send event to specific player in a game session
    */
   static emitToPlayer(
@@ -313,8 +438,6 @@ export class WebSocketService {
     event: string,
     data: any
   ) {
-    // Find socket for this player (this is a simplified approach)
-    // In a production app, you'd want to maintain a mapping of userId to socketId
     this.io.to(sessionId).emit(event, {
       ...data,
       sessionId,
@@ -338,8 +461,31 @@ export class WebSocketService {
     return roomSockets ? roomSockets.size > 0 : false;
   }
 
+  private static getPlayerTeamRoleFromSession(
+    gameState: GameState | null,
+    userId?: string
+  ): 'municipality' | 'mrf' | 'broker' | null {
+    if (!gameState || !userId || !gameState.teams?.length) return null;
+
+    for (const team of gameState.teams) {
+      if (team.players.municipality === userId) return 'municipality';
+      if (team.players.mrf === userId) return 'mrf';
+      if (team.players.broker === userId) return 'broker';
+    }
+
+    return null;
+  }
+
+  private static getTeamRoomName(
+    sessionId: string,
+    role: 'municipality' | 'mrf' | 'broker' | null
+  ): string | null {
+    if (!role) return null;
+    return `${sessionId}:team:${role}`;
+  }
+
   /**
-   * Broadcast system messages (waste spawned, penalties applied, etc.)
+   * Broadcast system messages
    */
   static broadcastSystemMessage(
     sessionId: string,
@@ -374,7 +520,6 @@ export class WebSocketService {
 
   /**
    * Broadcast game state update after any action/change
-   * This ensures all connected players receive real-time state updates
    */
   static broadcastGameStateUpdate(
     sessionId: string,
@@ -385,8 +530,8 @@ export class WebSocketService {
     this.io.to(sessionId).emit('game-state-updated', {
       sessionId,
       gameState,
-      actionType, // e.g., 'waste-collected', 'waste-spawned', 'turn-ended', etc.
-      actionDetails, // Additional context about what changed
+      actionType,
+      actionDetails,
       timestamp: Date.now(),
     });
 
@@ -396,8 +541,7 @@ export class WebSocketService {
   }
 
   /**
-   * Broadcast full game state payload that mirrors the `/api/games/:sessionId` response structure
-   * Includes computed extras like countdown time remaining, turn summary and statistics.
+   * Broadcast full game state payload
    */
   static broadcastFullGameState(
     sessionId: string,

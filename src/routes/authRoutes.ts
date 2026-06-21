@@ -1,10 +1,26 @@
 import { Router } from 'express';
 import { getProfile, login, register, updateUserRole } from '../controllers/authController';
 import { protect } from '../middleware/auth';
-import { loginSchema, registerSchema } from '../types';
 import { validate } from '../utils/validation';
+import { z } from 'zod';
 
 const router = Router();
+
+// ✅ Define schemas inline
+const registerSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters'),
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+  }),
+});
+
+const loginSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(1, 'Password is required'),
+  }),
+});
 
 /**
  * @swagger
@@ -12,41 +28,6 @@ const router = Router();
  *   post:
  *     summary: Register a new user account
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *               - email
- *               - password
- *             properties:
- *               name:
- *                 type: string
- *                 example: John Doe
- *               email:
- *                 type: string
- *                 format: email
- *                 example: john@example.com
- *               password:
- *                 type: string
- *                 format: password
- *                 minLength: 6
- *                 example: password123
- *               accountType:
- *                 type: string
- *                 enum: [student, educator, spectator, admin]
- *                 default: student
- *                 description: Permanent account type (who the user is)
- *     responses:
- *       201:
- *         description: User registered successfully
- *       400:
- *         description: Invalid input
- *       409:
- *         description: User already exists
  */
 router.post('/register', validate(registerSchema), register);
 
@@ -56,29 +37,6 @@ router.post('/register', validate(registerSchema), register);
  *   post:
  *     summary: Authenticate user and receive JWT token
  *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: john@example.com
- *               password:
- *                 type: string
- *                 format: password
- *                 example: password123
- *     responses:
- *       200:
- *         description: Login successful
- *       401:
- *         description: Invalid credentials
  */
 router.post('/login', validate(loginSchema), login);
 
@@ -90,11 +48,6 @@ router.post('/login', validate(loginSchema), login);
  *     tags: [Authentication]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Profile retrieved successfully
- *       401:
- *         description: Not authorized
  */
 router.get('/profile', protect, getProfile);
 
@@ -102,32 +55,10 @@ router.get('/profile', protect, getProfile);
  * @swagger
  * /api/auth/update-role:
  *   put:
- *     summary: Update user's game role (Municipality/MRF/Broker)
+ *     summary: Update user's game role
  *     tags: [Authentication]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - role
- *             properties:
- *               role:
- *                 type: string
- *                 enum: [municipality, mrf, broker]
- *                 description: The game role to assign to the user
- *     responses:
- *       200:
- *         description: User role updated successfully
- *       400:
- *         description: Invalid role
- *       401:
- *         description: Not authorized
- *       404:
- *         description: User not found
  */
 router.put('/update-role', protect, updateUserRole);
 

@@ -1,7 +1,24 @@
 import { Document } from 'mongoose';
 import { z } from 'zod';
 
-// User Types
+// ============================================
+// CORE TYPES
+// ============================================
+
+export type MaterialType = 'paper' | 'plastic' | 'metal' | 'glass' | 'wood';
+export type QualityGrade = 'A' | 'B' | 'C' | 'F';
+export type PlayerRole = 'municipality' | 'mrf' | 'broker';
+export type WasteOrigin = 'Residential' | 'Commercial' | 'Industrial';
+export type BatchStatus = 'PENDING' | 'DELIVERED' | 'FAILED';
+export type GameStatus = 'active' | 'won' | 'lost' | 'complete' | 'eliminated';
+export type GameMode = 'waste' | 'energy';
+export type LobbyStage = 'waiting-room' | 'role-selection' | 'pairing' | 'in-game' | 'completed';
+export type TeamStatus = 'active' | 'eliminated' | 'completed';
+
+// ============================================
+// USER TYPES
+// ============================================
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -20,15 +37,9 @@ export interface DecodedToken {
   exp: number;
 }
 
-// Lobby & Session Types
-export type GameMode = 'waste' | 'energy';
-
-export type LobbyStage =
-  | 'waiting-room'
-  | 'role-selection'
-  | 'pairing'
-  | 'in-game'
-  | 'completed';
+// ============================================
+// LOBBY & SESSION TYPES
+// ============================================
 
 export interface LobbyState {
   sessionId: string;
@@ -46,17 +57,15 @@ export interface LobbyState {
   pairId?: string | null;
   partnerSessionId?: string | null;
   teamRole?: 'Team A' | 'Team B' | null;
-  pairStatus?:
-    | 'active'
-    | 'team_a_eliminated'
-    | 'team_b_eliminated'
-    | 'completed'
-    | null;
+  pairStatus?: 'active' | 'team_a_eliminated' | 'team_b_eliminated' | 'completed' | null;
   createdAt: Date;
   maxPlayers: number;
 }
 
-// Active Transport Interface
+// ============================================
+// ACTIVE TRANSPORT
+// ============================================
+
 export interface ActiveTransport {
   id: string;
   batchId: string;
@@ -69,7 +78,10 @@ export interface ActiveTransport {
   status: 'in-transit' | 'completed';
 }
 
-// Game Constants
+// ============================================
+// GAME CONSTANTS
+// ============================================
+
 export interface GameConstants {
   REAL_TIME_GAME_DURATION_MINUTES: number;
   GAME_DURATION_DAYS: number;
@@ -144,26 +156,19 @@ export interface GameConstants {
   PLAYER_BID_CAP: number;
   MARKUP_CONSTANT: number;
   REFUSE_HEALTH_PENALTY_PER_TON: number;
+  // ✅ NEW: Per-team timer
+  TEAM_GAME_DURATION_MINUTES: number;
 }
 
-export interface GameState {
+// ============================================
+// TEAM DATA (NEW)
+// ============================================
+
+export interface TeamData {
+  teamId: string;
   sessionId: string;
-  currentTurn: number;
-  budget: number;
-  cityHealth: number;
-  teamScore: number;
-  maxTeamScore: number;
-  totalCO2: number;
-  wasteInventory: number;
-  maxCapacity: number;
-  constants: GameConstants;
-  wasteBatches: WasteBatch[];
-  mrfQueue: MRFQueue[];
-  materialInventory: Material[];
-  transactions: Transaction[];
-  cityProjects: CityProject[];
-  activityLog: string[];
-  gameStatus: 'active' | 'won' | 'lost' | 'complete';
+  citySlot: number;
+  teamName: string;
   players: {
     municipality: string;
     mrf: string;
@@ -174,12 +179,34 @@ export interface GameState {
     mrf: string;
     broker: string;
   };
-  gameStartTime: number;
-  lastWasteSpawnTime: number;
-  lastAutoSaveTime: number;
+  // Team metrics
+  budget: number;
+  cityHealth: number;
+  totalCO2: number;
+  wasteInventory: number;
+  totalTransportTrips: number;
+  totalLandfillTons: number;
+  maxTeamScore: number;
+  // Timer
+  teamStartTime: number;
   minutesElapsed: number;
-  currentGameDay: number;
-  currentGameHour: number;
+  gameStatus: TeamStatus;
+  // Projects (per team)
+  cityProjects: CityProject[];
+  // Inventory (per team)
+  municipalInventory: {
+    paper: number;
+    plastic: number;
+    metal: number;
+    glass: number;
+    wood: number;
+  };
+  // Other game state (per team)
+  wasteBatches: WasteBatch[];
+  mrfQueue: MRFQueue[];
+  materialInventory: Material[];
+  transactions: Transaction[];
+  activityLog: string[];
   activeLocks: {
     [key: string]: {
       playerId: string;
@@ -187,23 +214,10 @@ export interface GameState {
       type: 'batch' | 'queue' | 'material';
     };
   };
-  pairId?: string | null;
-  partnerSessionId?: string | null;
-  teamRole?: 'Team A' | 'Team B' | null;
-  pairStatus?: 'active' | 'team_a_eliminated' | 'team_b_eliminated' | 'completed' | null;
   gameOverCountdown: {
     active: boolean;
     startTime: number | null;
     reason: 'health' | 'budget' | 'time' | null;
-  };
-  totalTransportTrips: number;
-  totalLandfillTons: number;
-  municipalInventory: {
-    paper: number;
-    plastic: number;
-    metal: number;
-    glass: number;
-    wood: number;
   };
   surrenderVotes: string[];
   marketplaceListing: Auction[];
@@ -218,14 +232,109 @@ export interface GameState {
     [playerId: string]: number;
   };
   activeTransports: ActiveTransport[];
+  // ✅ NEW: Total project score for ranking
+  totalProjectScore: number;
+  // ✅ NEW: Is team eliminated
+  isEliminated: boolean;
+  eliminationReason?: 'health' | 'budget' | 'time' | null;
 }
+
+// ============================================
+// GAME STATE (UPDATED)
+// ============================================
+
+export interface GameState {
+  sessionId: string;
+  roomCode?: string;
+  roomTeams?: Array<{
+    teamId: string;
+    citySlot: number;
+    sessionId: string;
+  }>;
+  citySlot?: number;
+  // ✅ UPDATED: Multi-team support - teams array
+  teams: TeamData[];
+  // Game-wide settings
+  constants: GameConstants;
+  gameStartTime: number;
+  gameStatus: 'active' | 'completed';
+  // Legacy fields - kept for backward compatibility but will be migrated
+  currentTurn?: number;
+  budget?: number;
+  cityHealth?: number;
+  totalCO2?: number;
+  wasteInventory?: number;
+  maxCapacity?: number;
+  wasteBatches?: WasteBatch[];
+  mrfQueue?: MRFQueue[];
+  materialInventory?: Material[];
+  transactions?: Transaction[];
+  cityProjects?: CityProject[];
+  activityLog?: string[];
+  players?: {
+    municipality: string;
+    mrf: string;
+    broker: string;
+  };
+  playerNames?: {
+    municipality: string;
+    mrf: string;
+    broker: string;
+  };
+  lastWasteSpawnTime?: number;
+  lastAutoSaveTime?: number;
+  currentGameDay?: number;
+  currentGameHour?: number;
+  activeLocks?: {
+    [key: string]: {
+      playerId: string;
+      timestamp: number;
+      type: 'batch' | 'queue' | 'material';
+    };
+  };
+  pairId?: string | null;
+  partnerSessionId?: string | null;
+  teamRole?: 'Team A' | 'Team B' | null;
+  pairStatus?: 'active' | 'team_a_eliminated' | 'team_b_eliminated' | 'completed' | null;
+  gameOverCountdown?: {
+    active: boolean;
+    startTime: number | null;
+    reason: 'health' | 'budget' | 'time' | null;
+  };
+  totalTransportTrips?: number;
+  totalLandfillTons?: number;
+  municipalInventory?: {
+    paper: number;
+    plastic: number;
+    metal: number;
+    glass: number;
+    wood: number;
+  };
+  surrenderVotes?: string[];
+  marketplaceListing?: Auction[];
+  externalStock?: {
+    paper: number;
+    plastic: number;
+    metal: number;
+    glass: number;
+    wood: number;
+  };
+  activeBids?: {
+    [playerId: string]: number;
+  };
+  activeTransports?: ActiveTransport[];
+}
+
+// ============================================
+// WASTE BATCH
+// ============================================
 
 export interface WasteBatch {
   id: string;
   playerId: string;
   turnGenerated: number;
   generationTime: number;
-  origin: 'Residential' | 'Commercial' | 'Industrial';
+  origin: WasteOrigin;
   mass: number;
   composition: {
     paper: number;
@@ -234,12 +343,16 @@ export interface WasteBatch {
     glass: number;
     wood?: number;
   };
-  status: 'PENDING' | 'DELIVERED' | 'FAILED' | 'IN_TRANSIT';
+  status: BatchStatus | 'IN_TRANSIT';
   collectionDeadline: number;
   lockToken: string | null;
   lockedAt: number | null;
   penalized: boolean;
 }
+
+// ============================================
+// MRF QUEUE
+// ============================================
 
 export interface MRFQueue {
   id: string;
@@ -251,16 +364,24 @@ export interface MRFQueue {
   penaltyApplied?: boolean;
 }
 
+// ============================================
+// MATERIAL
+// ============================================
+
 export interface Material {
   id: string;
-  type: 'paper' | 'plastic' | 'metal' | 'glass' | 'wood';
+  type: MaterialType;
   materialOrWaste: boolean;
-  quality: 'A' | 'B' | 'C' | 'F';
+  quality: QualityGrade;
   mass: number;
   contamination: number;
   owner: 'mrf' | 'broker' | 'municipality';
   listed: boolean;
 }
+
+// ============================================
+// TRANSACTION
+// ============================================
 
 export interface Transaction {
   id: string;
@@ -274,6 +395,10 @@ export interface Transaction {
   transactionType: 'external_sale' | 'internal_transfer';
   revenue: number;
 }
+
+// ============================================
+// CITY PROJECT (UPDATED - Per Team)
+// ============================================
 
 export interface CityProject {
   id: string;
@@ -301,13 +426,18 @@ export interface CityProject {
   difficultyScore: number;
   estimatedExternalCost: number;
   deadline: number;
+  score: number;
 }
+
+// ============================================
+// AUCTION
+// ============================================
 
 export interface Auction {
   auctionId: string;
   originTeam: string;
-  materialType: 'paper' | 'plastic' | 'metal' | 'glass' | 'wood';
-  grade: 'A' | 'B' | 'C' | 'F';
+  materialType: MaterialType;
+  grade: QualityGrade;
   mass: number;
   currentBid: number;
   entryPrice: number;
@@ -318,6 +448,69 @@ export interface Auction {
   status: 'pending' | 'active' | 'sold' | 'expired';
 }
 
+// ============================================
+// MATCHMAKING TYPES
+// ============================================
+
+export interface MatchmakingRoom {
+  roomCode: string;
+  roomName: string;
+  ownerId: string;
+  ownerName: string;
+  isPrivate: boolean;
+  isAdminRoom: boolean;
+  maxTeams: number;
+  teams: MatchmakingTeam[];
+  status: 'waiting' | 'ready' | 'started' | 'completed';
+  gameSessionId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MatchmakingTeam {
+  teamId: string;
+  sessionId: string;
+  citySlot: number;
+  players: MatchmakingPlayer[];
+  isReady: boolean;
+}
+
+export interface MatchmakingPlayer {
+  userId: string;
+  name: string;
+  role: PlayerRole | null;
+  isLeader: boolean;
+}
+
+// ============================================
+// GAME RESULTS TYPES
+// ============================================
+
+export interface GameResult {
+  sessionId: string;
+  teamId: string;
+  teamName: string;
+  citySlot: number;
+  projectScoreTotal: number;
+  rank: number;
+  health: number;
+  budget: number;
+  totalCO2: number;
+  gameStatus: TeamStatus;
+  failReason?: 'health' | 'budget' | 'time' | null;
+  createdAt: Date;
+}
+
+
+// ============================================
+// ZOD SCHEMAS (Keep existing ones)
+// ============================================
+
+// ... (keep all existing Zod schemas unchanged)
+
+// ============================================
+// TYPE INFERENCES
+// ============================================
 // Zod Schemas
 export const registerSchema = z.object({
   body: z.object({
@@ -345,9 +538,11 @@ export const adminForceExitSchema = z.object({
   params: z.object({
     userId: z.string().min(1, 'User ID is required'),
   }),
-  body: z.object({
-    reason: z.string().max(200).optional(),
-  }).optional(),
+  body: z
+    .object({
+      reason: z.string().max(200).optional(),
+    })
+    .optional(),
 });
 
 export const createLobbySchema = z.object({
@@ -358,7 +553,12 @@ export const createLobbySchema = z.object({
 
 export const joinLobbySchema = z.object({
   body: z.object({
-    lobbyCode: z.string().regex(/^[A-Z0-9]{6}$/, 'Lobby code must be exactly 6 alphanumeric characters'),
+    lobbyCode: z
+      .string()
+      .regex(
+        /^[A-Z0-9]{6}$/,
+        'Lobby code must be exactly 6 alphanumeric characters'
+      ),
   }),
 });
 
@@ -396,16 +596,6 @@ export const collectWasteSchema = z.object({
   }),
 });
 
-export const collectWasteTransportSchema = z.object({
-  body: z.object({
-    batchId: z.string().min(1, 'Batch ID is required'),
-    mode: z.enum(['fast', 'slow']),
-  }),
-  params: z.object({
-    sessionId: z.string().min(1, 'Session ID is required'),
-  }),
-});
-
 export const processWasteSchema = z.object({
   body: z.object({
     queueId: z.string().min(1, 'Queue ID is required'),
@@ -426,7 +616,7 @@ export const sellMaterialSchema = z.object({
   body: z.object({
     materialId: z.string().min(1, 'Material ID is required'),
     transactionType: z.enum(['external_sale', 'internal_transfer']),
-    projectId: z.string().optional(),
+    projectId: z.string().optional(), // Required for internal transfers
     sessionId: z.string().min(1, 'Session ID is required'),
   }),
 });
@@ -456,18 +646,22 @@ export const constructProjectSchema = z.object({
   }),
 });
 
+
 export type RegisterInput = z.infer<typeof registerSchema>['body'];
 export type LoginInput = z.infer<typeof loginSchema>['body'];
 export type JoinLobbyInput = z.infer<typeof joinLobbySchema>['body'];
 export type SelectRoleInput = z.infer<typeof selectRoleSchema>['body'];
 export type LeaveLobbyInput = z.infer<typeof leaveLobbySchema>['body'];
-export type ContinueToRoleSelectionInput = z.infer<typeof continueToRoleSelectionSchema>['body'];
+export type ContinueToRoleSelectionInput = z.infer<
+  typeof continueToRoleSelectionSchema
+>['body'];
 export type ContinueToPairingInput = z.infer<typeof continueToPairingSchema>['body'];
 export type CollectWasteInput = z.infer<typeof collectWasteSchema>;
-export type CollectWasteTransportInput = z.infer<typeof collectWasteTransportSchema>;
 export type ProcessWasteInput = z.infer<typeof processWasteSchema>['body'];
 export type AssignGradeInput = z.infer<typeof assignGradeSchema>['body'];
 export type SellMaterialInput = z.infer<typeof sellMaterialSchema>['body'];
 export type PlaceBidInput = z.infer<typeof placeBidSchema>['body'];
-export type BuyFromExternalWholesalerInput = z.infer<typeof buyFromExternalWholesalerSchema>['body'];
+export type BuyFromExternalWholesalerInput = z.infer<
+  typeof buyFromExternalWholesalerSchema
+>['body'];
 export type ConstructProjectInput = z.infer<typeof constructProjectSchema>;

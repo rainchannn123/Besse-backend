@@ -49,3 +49,18 @@ export const playerHistory = asyncHandler(
     sendResponse(res, 200, 'Player game history retrieved', data);
   }
 );
+
+// ✅ NEW: Get all teams in a specific room for admin monitoring
+export const getRoomTeams = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { roomCode } = req.params;
+    
+    // This would need to be implemented in adminService
+    // For now, return a placeholder
+    sendResponse(res, 200, 'Room teams retrieved', { 
+      roomCode,
+      teams: [],
+      message: 'Admin monitoring for all teams in room' 
+    });
+  }
+);

@@ -6,10 +6,27 @@ import {
   playerHistory,
 } from '../controllers/adminController';
 import { protectAdmin } from '../middleware/adminAuth';
-import { adminForceExitSchema, adminLoginSchema } from '../types';
 import { validate } from '../utils/validation';
+import { z } from 'zod';
 
 const router = Router();
+
+// ✅ Define schemas inline
+const adminLoginSchema = z.object({
+  body: z.object({
+    username: z.string().min(1, 'Username is required'),
+    password: z.string().min(1, 'Password is required'),
+  }),
+});
+
+const adminForceExitSchema = z.object({
+  params: z.object({
+    userId: z.string().min(1, 'User ID is required'),
+  }),
+  body: z.object({
+    reason: z.string().max(200).optional(),
+  }).optional(),
+});
 
 router.post('/auth/login', validate(adminLoginSchema), loginAdmin);
 router.get('/monitor/overview', protectAdmin, monitoringOverview);
@@ -19,7 +36,6 @@ router.patch(
   validate(adminForceExitSchema),
   forceExit
 );
-
 router.get('/players/:userId/history', protectAdmin, playerHistory);
 
 export default router;
