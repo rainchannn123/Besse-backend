@@ -14,27 +14,33 @@ export class MatchmakingService {
   private static readonly MAX_TEAMS = 30;
   private static readonly ROOM_CODE_LENGTH = 6;
 
-  // ✅ Helper: Sort players by role in the correct seat order
+    // ✅ Helper: Sort players by role in the correct seat order
   // Seat order: Municipality (0), MRF (1), Broker (2)
+  // Keep unassigned players visible (especially leader) in the remaining seats.
   public static sortPlayersByRole(players: any[]): any[] {
-    const roleOrder: Record<string, number> = {
-      'municipality': 0,
-      'mrf': 1,
-      'broker': 2,
-    };
+    const roles = ['municipality', 'mrf', 'broker'];
 
-    const sortedPlayers = players
-      .filter(p => p.role !== null)
-      .sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
+    const remainingPlayers = (players || [])
+      .filter((p: any) => p && p.userId && p.userId !== 'empty')
+      .map((p: any) => ({
+        userId: p.userId,
+        name: p.name || 'Unknown Player',
+        role: p.role ?? null,
+        isLeader: !!p.isLeader,
+      }));
 
     const result: any[] = [];
-    const roles = ['municipality', 'mrf', 'broker'];
-    let sortedIndex = 0;
 
     for (const role of roles) {
-      if (sortedIndex < sortedPlayers.length && sortedPlayers[sortedIndex].role === role) {
-        result.push(sortedPlayers[sortedIndex]);
-        sortedIndex++;
+      const exactRoleIndex = remainingPlayers.findIndex((p: any) => p.role === role);
+
+      if (exactRoleIndex !== -1) {
+        result.push(remainingPlayers.splice(exactRoleIndex, 1)[0]);
+        continue;
+      }
+
+      if (remainingPlayers.length > 0) {
+        result.push(remainingPlayers.shift());
       } else {
         result.push({
           userId: 'empty',
@@ -47,6 +53,8 @@ export class MatchmakingService {
 
     return result;
   }
+
+
 
   static async generateRoomCode(): Promise<string> {
     let code: string;
@@ -73,23 +81,26 @@ export class MatchmakingService {
     return result;
   }
 
-  static async getTeamDataFromLobby(sessionId: string): Promise<{
+    static async getTeamDataFromLobby(sessionId: string): Promise<{
     teamName: string;
-    players: { userId: string; name: string; role: string | null }[];
+    players: { userId: string; name: string; role: string | null; isLeader: boolean }[];
   }> {
+
     const lobby = await Lobby.findOne({ sessionId });
     if (!lobby) {
       throw new NotFoundError('Lobby not found');
     }
 
-    return {
+        return {
       teamName: lobby.leader.toString(),
       players: lobby.players.map((p: any) => ({
         userId: p.userId.toString(),
         name: p.name,
         role: p.selectedRole,
+        isLeader: p.userId.toString() === lobby.leader.toString(),
       })),
     };
+
   }
 
   // ✅ NEW: Get all team members for a session
@@ -166,7 +177,7 @@ export class MatchmakingService {
             userId: p.userId === 'empty' ? 'empty' : p.userId,
             name: p.name || 'Empty Seat',
             role: p.role,
-            isLeader: p.userId === user._id.toString(),
+            isLeader: !!p.isLeader,
           })),
           isReady: false,
         },
@@ -241,11 +252,12 @@ export class MatchmakingService {
     }
 
     // Get team data
-    const teamData = await this.getTeamDataFromLobby(sessionId);
-    const user = await User.findOne({ currentSession: sessionId});
-    if (!user) {
+        const teamData = await this.getTeamDataFromLobby(sessionId);
+    const userExists = await User.exists({ currentSession: sessionId });
+    if (!userExists) {
       throw new NotFoundError('User not found');
     }
+
 
     // Find next available city slot
     const occupiedSlots = room.teams.map((t: any) => t.citySlot);
@@ -269,7 +281,7 @@ export class MatchmakingService {
         userId: p.userId === 'empty' ? 'empty' : p.userId,
         name: p.name || 'Empty Seat',
         role: p.role,
-        isLeader: p.userId === user._id.toString(),
+        isLeader: !!p.isLeader,
       })),
       isReady: false,
     });

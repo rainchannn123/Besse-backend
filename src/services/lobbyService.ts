@@ -213,11 +213,13 @@ export class LobbyService {
         if (teamIndex !== -1) {
           const { MatchmakingService } = require('./matchmakingService');
           
-          const playersWithRoles = lobby.players.map((p: any) => ({
+                    const playersWithRoles = lobby.players.map((p: any) => ({
             userId: p.userId.toString(),
             name: p.name,
             role: p.selectedRole,
+            isLeader: p.userId.toString() === lobby.leader.toString(),
           }));
+
           
           console.log(`[LobbyService] Players in lobby:`, playersWithRoles);
           
@@ -225,7 +227,13 @@ export class LobbyService {
           
           console.log(`[LobbyService] Sorted players:`, sortedPlayers);
           
-          matchmakingRoom.teams[teamIndex].players = sortedPlayers;
+                    matchmakingRoom.teams[teamIndex].players = sortedPlayers.map((p: any) => ({
+            userId: p.userId === 'empty' ? 'empty' : p.userId,
+            name: p.name || 'Empty Seat',
+            role: p.role ?? null,
+            isLeader: !!p.isLeader,
+          }));
+
           await matchmakingRoom.save();
           
           // Broadcast seating update to all team members
@@ -443,9 +451,19 @@ export class LobbyService {
       };
     }
 
-    if (lobby.status === 'active') {
-      throw new ValidationError('Cannot leave a lobby while the game is active');
-    }
+        if (lobby.status === 'active') {
+          const currentGame = await GameSession.findOne({ sessionId }).select('gameState.gameStatus gameState.teams');
+          const gameStatus = currentGame?.gameState?.gameStatus;
+          const teamStatus = currentGame?.gameState?.teams?.find((t: any) => t.sessionId === sessionId)?.gameStatus;
+
+          // Allow leaving when THIS team's run is done, even if the overall room/game is still active.
+          const teamStillActive = !teamStatus || teamStatus === 'active';
+          const roomStillActive = !gameStatus || gameStatus === 'active';
+
+          if (roomStillActive && teamStillActive) {
+            throw new ValidationError('Cannot leave a lobby while the game is active');
+          }
+        }
 
     const playerToRemove = lobby.players.find(p => p.userId.equals(userObjectId));
 

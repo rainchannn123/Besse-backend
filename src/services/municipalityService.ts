@@ -17,6 +17,8 @@ export class MunicipalityService {
     slow: 60 * 1000,
   };
 
+  private static transportTimers: Map<string, NodeJS.Timeout> = new Map();
+
   static async collectWasteWithTransport(
     sessionId: string,
     batchId: string,
@@ -49,9 +51,9 @@ export class MunicipalityService {
     const transportCost = batch.mass * transportCostPerTon;
     const transportCO2 = CalculationService.calculateCO2FromTransport(1, DEFAULT_GAME_CONSTANTS);
 
-    if (team.wasteInventory + batch.mass > 150) {
-      throw new Error('Inventory capacity exceeded. Process existing waste first.');
-    }
+    // if (team.wasteInventory + batch.mass > 150) {
+    //   throw new Error('Inventory capacity exceeded. Process existing waste first.');
+    // }
 
     if (team.budget < transportCost) {
       throw new ValidationError(
@@ -80,33 +82,55 @@ export class MunicipalityService {
       status: 'in-transit',
     };
 
-    if (!team.activeTransports) {
+        if (!team.activeTransports) {
       team.activeTransports = [];
     }
     team.activeTransports.push(activeTransport);
+
+    // Schedule near-real-time completion so MRF queue updates without waiting for system-check tick
+    const timerKey = `${sessionId}:${activeTransport.id}`;
+    const existingTimer = this.transportTimers.get(timerKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.transportTimers.delete(timerKey);
+    }
+
+    const timer = setTimeout(async () => {
+      this.transportTimers.delete(timerKey);
+      try {
+        await this.completeAllTransports(sessionId);
+      } catch {
+        // Fallback path is system-check; ignore timer errors
+      }
+    }, Math.max(0, activeTransport.endTime - now));
+
+    this.transportTimers.set(timerKey, timer);
 
     team.activityLog.unshift(
       `[Municipality] Started ${mode} transport of ${batch.mass.toFixed(1)} tons ${batch.origin} waste. ` +
       `Cost: $${transportCost.toFixed(0)}, Time: ${this.TRANSPORT_DURATIONS[mode] / 1000}s, CO₂: +${transportCO2.toFixed(1)}t`
     );
 
-    // ✅ Update team data
+        // ✅ Update team data
     await GameService.updateTeamData(sessionId, team);
 
-    WebSocketService.broadcastGameStateUpdate(
-      sessionId,
-      { teams: [team] } as any,
-      'transport-started',
-      {
-        transportId: activeTransport.id,
-        mode: mode,
-        batchMass: batch.mass,
-        batchOrigin: batch.origin,
-        durationMs: this.TRANSPORT_DURATIONS[mode],
-        endTime: activeTransport.endTime,
-        activeCount: team.activeTransports.length,
-      }
-    );
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(
+        sessionId,
+        updatedGameState,
+        'transport-started',
+        {
+          transportId: activeTransport.id,
+          mode: mode,
+          batchMass: batch.mass,
+          batchOrigin: batch.origin,
+          durationMs: this.TRANSPORT_DURATIONS[mode],
+          endTime: activeTransport.endTime,
+          activeCount: team.activeTransports.length,
+        }
+      );
+    }
 
     WebSocketService.broadcastPlayerAction(
       sessionId,
@@ -128,8 +152,9 @@ export class MunicipalityService {
       return null;
     }
 
-    const now = Date.now();
+        const now = Date.now();
     let hasChanges = false;
+    const completedTransports: Array<{ batchId: string; batchMass: number; mode: 'fast' | 'slow'; activeCount: number }> = [];
 
     for (let i = team.activeTransports.length - 1; i >= 0; i--) {
       const transport = team.activeTransports[i];
@@ -160,24 +185,36 @@ export class MunicipalityService {
           `[System] ${transport.mode.toUpperCase()} transport completed! ${batch.mass.toFixed(1)} tons of ${batch.origin} waste delivered to MRF.`
         );
 
-        hasChanges = true;
+                hasChanges = true;
+                completedTransports.push({
+                  batchId: batch.id,
+                  batchMass: batch.mass,
+                  mode: transport.mode,
+                  activeCount: team.activeTransports.length,
+                });
 
-        WebSocketService.broadcastGameStateUpdate(
-          sessionId,
-          { teams: [team] } as any,
-          'transport-completed',
-          {
-            batchId: batch.id,
-            batchMass: batch.mass,
-            mode: transport.mode,
-            activeCount: team.activeTransports.length,
-          }
-        );
+                const timerKey = `${sessionId}:${transport.id}`;
+                const existingTimer = this.transportTimers.get(timerKey);
+                if (existingTimer) {
+                  clearTimeout(existingTimer);
+                  this.transportTimers.delete(timerKey);
+                }
       }
     }
 
-    if (hasChanges) {
+        if (hasChanges) {
       await GameService.updateTeamData(sessionId, team);
+      const updatedGameState = await GameService.getGameState(sessionId);
+      if (updatedGameState) {
+        for (const completed of completedTransports) {
+          WebSocketService.broadcastGameStateUpdate(
+            sessionId,
+            updatedGameState,
+            'transport-completed',
+            completed
+          );
+        }
+      }
     }
 
     return team;
@@ -217,9 +254,15 @@ export class MunicipalityService {
       `[Municipality] Rejected ${batch.mass.toFixed(1)} tons ${batch.origin} waste. CO2: +${landfillCO2.toFixed(1)} tons (landfill)`
     );
 
-    await GameService.updateTeamData(sessionId, team);
+        await GameService.updateTeamData(sessionId, team);
 
-    WebSocketService.broadcastGameState(sessionId, { teams: [team] } as any, 'waste-rejected');
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'waste-rejected', {
+        batchId: batch.id,
+        batchMass: batch.mass,
+      });
+    }
 
     return team;
   }
@@ -307,8 +350,24 @@ export class MunicipalityService {
       );
     }
 
-    // Update team data
+        // Update team data
     await GameService.updateTeamData(sessionId, team);
+
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(
+        sessionId,
+        updatedGameState,
+        project.completed ? 'project-completed' : 'project-constructed',
+        {
+          projectId,
+          materialType,
+          materialAmount,
+          progress: project.progress,
+          completed: project.completed,
+        }
+      );
+    }
 
     // Broadcast updates
     WebSocketService.broadcastPlayerAction(

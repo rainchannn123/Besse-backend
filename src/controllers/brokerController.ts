@@ -9,23 +9,22 @@ import { sendResponse } from '../utils/response';
 export const getActiveAuctions = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user._id;
-    const currentSession = (req as any).user.currentSession;
+    const requestedSessionId = (req.query as any)?.sessionId as string | undefined;
+    const sessionId = requestedSessionId || (req as any).user.currentSession;
 
-    if (!currentSession) {
+    if (!sessionId) {
       sendResponse(res, 400, 'No active session found');
       return;
     }
 
-    // ✅ Get game state and check if user is a broker
-    const gameState = await GameService.getGameState(currentSession);
+    const gameState = await GameService.getGameState(sessionId);
     if (!gameState) {
       sendResponse(res, 404, 'Game session not found');
       return;
     }
 
-    // ✅ Check if user is broker in their team
-    const team = gameState.teams.find(t => 
-      t.players.broker === userId.toString()
+    const team = gameState.teams.find(
+      t => t.sessionId === sessionId && t.players.broker === userId.toString()
     );
 
     if (!team) {
@@ -33,8 +32,7 @@ export const getActiveAuctions = asyncHandler(
       return;
     }
 
-    // ✅ Get auctions from ALL teams in the room
-    const auctions = await BrokerService.getRoomAuctions(currentSession);
+    const auctions = await BrokerService.getRoomAuctions(sessionId);
 
     sendResponse(res, 200, 'Active auctions retrieved successfully', {
       auctions,
@@ -45,24 +43,23 @@ export const getActiveAuctions = asyncHandler(
 // ✅ Place bid on auction
 export const placeBid = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const { auctionId }: PlaceBidInput = req.body;
+    const { auctionId, sessionId: bodySessionId }: PlaceBidInput & { sessionId?: string } = req.body as any;
     const userId = (req as any).user._id;
-    const currentSession = (req as any).user.currentSession;
+    const sessionId = bodySessionId || (req as any).user.currentSession;
 
-    if (!currentSession) {
+    if (!sessionId) {
       sendResponse(res, 400, 'No active session found');
       return;
     }
 
-    // ✅ Check if user is broker
-    const gameState = await GameService.getGameState(currentSession);
+    const gameState = await GameService.getGameState(sessionId);
     if (!gameState) {
       sendResponse(res, 404, 'Game session not found');
       return;
     }
 
-    const team = gameState.teams.find(t => 
-      t.players.broker === userId.toString()
+    const team = gameState.teams.find(
+      t => t.sessionId === sessionId && t.players.broker === userId.toString()
     );
 
     if (!team) {
@@ -70,9 +67,8 @@ export const placeBid = asyncHandler(
       return;
     }
 
-    // ✅ Place bid
     const updatedTeam = await BrokerService.placeBid(
-      currentSession,
+      sessionId,
       auctionId,
       userId
     );

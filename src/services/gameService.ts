@@ -31,6 +31,30 @@ export class GameService {
     wood: 20,
   } as const;
 
+  private static calculateMaxTeamScore(projects: CityProject[] = []): number {
+    return projects.reduce(
+      (sum, project) => sum + Number(project.score ?? project.scoreBonus ?? 0),
+      0
+    );
+  }
+
+  private static calculateCompletedProjectScore(projects: CityProject[] = []): number {
+    return projects
+      .filter((project) => project.completed)
+      .reduce((sum, project) => sum + Number(project.score ?? project.scoreBonus ?? 0), 0);
+  }
+
+  private static normalizeTeamScoreFields(team: TeamData): TeamData {
+    const maxTeamScore = this.calculateMaxTeamScore(team.cityProjects || []);
+    const totalProjectScore = this.calculateCompletedProjectScore(team.cityProjects || []);
+
+    team.maxTeamScore = maxTeamScore;
+    team.totalProjectScore = totalProjectScore;
+
+    return team;
+  }
+
+
   // ============================================
   // MULTI-TEAM GAME CREATION
   // ============================================
@@ -109,8 +133,9 @@ export class GameService {
         wasteInventory: 0,
         totalTransportTrips: 0,
         totalLandfillTons: 0,
-        teamStartTime: now,
+                teamStartTime: now,
         minutesElapsed: 0,
+        lastWasteSpawnTime: now,
         gameStatus: 'active',
         cityProjects: this.generateInitialProjects(),
         municipalInventory: {
@@ -190,6 +215,7 @@ export class GameService {
             totalLandfillTons: 0,
             teamStartTime: now,
             minutesElapsed: 0,
+            lastWasteSpawnTime: now,
             gameStatus: 'active',
             cityProjects: this.generateInitialProjects(),
             municipalInventory: {
@@ -228,6 +254,19 @@ export class GameService {
           });
         }
       }
+
+            // Ensure every team starts with at least one waste batch
+            for (const t of allTeams) {
+        if (!t.wasteBatches || t.wasteBatches.length === 0) {
+          this.spawnWaste(t);
+        }
+        t.lastWasteSpawnTime = now;
+        t.wasteInventory = (t.wasteBatches || [])
+          .filter((b) => b.status === 'PENDING')
+          .reduce((sum, b) => sum + b.mass, 0);
+        this.normalizeTeamScoreFields(t);
+      }
+
 
       // ✅ Update lobby status to active
       lobby.status = 'active';
@@ -603,11 +642,27 @@ export class GameService {
   // GET TEAM DATA
   // ============================================
 
-  static async getTeamData(sessionId: string): Promise<TeamData | null> {
+    static async getTeamData(sessionId: string): Promise<TeamData | null> {
     const gameState = await this.getGameState(sessionId);
     if (!gameState) return null;
-    return gameState.teams.find(t => t.sessionId === sessionId) || null;
+
+    const teamIndex = gameState.teams.findIndex((t) => t.sessionId === sessionId);
+    if (teamIndex === -1) return null;
+
+    const team = gameState.teams[teamIndex];
+    const prevMax = team.maxTeamScore;
+    const prevTotal = team.totalProjectScore;
+
+    this.normalizeTeamScoreFields(team);
+
+    if (prevMax !== team.maxTeamScore || prevTotal !== team.totalProjectScore) {
+      gameState.teams[teamIndex] = team;
+      await this.updateGameState(sessionId, gameState);
+    }
+
+    return team;
   }
+
 
   static async getGameState(sessionId: string): Promise<GameState | null> {
     const session = await GameSession.findOne({ sessionId });
@@ -619,22 +674,33 @@ export class GameService {
     return gameState?.gameState?.teams || [];
   }
 
-  static async updateTeamData(sessionId: string, teamData: TeamData): Promise<void> {
+    static async updateTeamData(sessionId: string, teamData: TeamData): Promise<void> {
     const gameState = await this.getGameState(sessionId);
     if (!gameState) return;
 
     const index = gameState.teams.findIndex(t => t.sessionId === sessionId);
     if (index === -1) return;
 
+    this.normalizeTeamScoreFields(teamData);
     gameState.teams[index] = teamData;
     await this.updateGameState(sessionId, gameState);
   }
 
-  static async updateGameState(sessionId: string, gameState: GameState): Promise<void> {
-    await GameSession.findOneAndUpdate(
-      { sessionId },
-      { gameState },
-      { new: true }
+
+    static async updateGameState(sessionId: string, gameState: GameState): Promise<void> {
+    const relatedSessionIds = new Set<string>([sessionId]);
+
+    // In matchmaking/multi-team mode, each team has its own GameSession document.
+    // Keep all copies in sync by writing the same authoritative gameState to all room sessions.
+    if (Array.isArray(gameState.roomTeams)) {
+      for (const rt of gameState.roomTeams) {
+        if (rt?.sessionId) relatedSessionIds.add(rt.sessionId);
+      }
+    }
+
+    await GameSession.updateMany(
+      { sessionId: { $in: Array.from(relatedSessionIds) } },
+      { gameState }
     );
   }
 
@@ -650,24 +716,26 @@ export class GameService {
     const elapsedMinutes = (now - team.teamStartTime) / (1000 * 60);
     team.minutesElapsed = elapsedMinutes;
 
-    if (elapsedMinutes >= this.constants.TEAM_GAME_DURATION_MINUTES) {
+        if (elapsedMinutes >= this.constants.TEAM_GAME_DURATION_MINUTES) {
       team.gameStatus = 'completed';
-      team.totalProjectScore = team.cityProjects
-        .filter(p => p.completed)
-        .reduce((sum, p) => sum + p.score, 0);
-      
+      team.totalProjectScore = this.calculateCompletedProjectScore(team.cityProjects);
+
       await this.updateTeamData(sessionId, team);
       await this.checkAllTeamsComplete(sessionId);
     }
+
   }
 
-  static async checkAllTeamsComplete(sessionId: string): Promise<void> {
+    static async checkAllTeamsComplete(sessionId: string): Promise<void> {
     const gameState = await this.getGameState(sessionId);
     if (!gameState) return;
+
+    gameState.teams = gameState.teams.map((team) => this.normalizeTeamScoreFields(team));
 
     const allCompleted = gameState.teams.every(t => 
       t.gameStatus === 'completed' || t.isEliminated
     );
+
 
     if (allCompleted) {
       gameState.gameStatus = 'completed';
@@ -714,9 +782,8 @@ export class GameService {
       team.isEliminated = true;
       team.gameStatus = 'eliminated';
       team.eliminationReason = reason;
-      team.totalProjectScore = team.cityProjects
-        .filter(p => p.completed)
-        .reduce((sum, p) => sum + p.score, 0);
+            team.totalProjectScore = this.calculateCompletedProjectScore(team.cityProjects);
+
 
       await this.updateTeamData(sessionId, team);
       await this.checkAllTeamsComplete(sessionId);
@@ -741,7 +808,8 @@ export class GameService {
       teamId: team.teamId,
       teamName: team.teamName,
       citySlot: team.citySlot,
-      totalScore: team.totalProjectScore,
+            totalScore: team.totalProjectScore ?? this.calculateCompletedProjectScore(team.cityProjects),
+
       status: team.gameStatus,
       budget: team.budget,
       health: team.cityHealth,
@@ -755,13 +823,15 @@ export class GameService {
   // GET PLAYER ROLE
   // ============================================
 
-  static async getPlayerRole(sessionId: string, userId: string): Promise<string | null> {
+    static async getPlayerRole(sessionId: string, userId: any): Promise<string | null> {
     const team = await this.getTeamData(sessionId);
     if (!team) return null;
-    
-    if (team.players.municipality === userId) return 'municipality';
-    if (team.players.mrf === userId) return 'mrf';
-    if (team.players.broker === userId) return 'broker';
+
+    const normalizedUserId = userId?.toString?.() ?? String(userId);
+
+    if (team.players.municipality === normalizedUserId) return 'municipality';
+    if (team.players.mrf === normalizedUserId) return 'mrf';
+    if (team.players.broker === normalizedUserId) return 'broker';
     return null;
   }
 
@@ -787,9 +857,101 @@ export class GameService {
   // PERFORM SYSTEM CHECK
   // ============================================
 
-  static async performSystemCheck(sessionId: string): Promise<void> {
-    await this.checkTeamTimer(sessionId);
-    await this.checkElimination(sessionId);
+    static async performSystemCheck(sessionId: string): Promise<void> {
+    const team = await this.getTeamData(sessionId);
+    if (!team) return;
+
+    // Process in-flight transports first (30s/60s delivery)
+    try {
+      const { MunicipalityService } = await import('./municipalityService');
+      await MunicipalityService.completeAllTransports(sessionId);
+    } catch (error) {
+      logger.error(`[GameService] Transport completion check failed for ${sessionId}`, error);
+    }
+
+    const refreshedTeam = (await this.getTeamData(sessionId)) || team;
+    if (refreshedTeam.isEliminated || refreshedTeam.gameStatus !== 'active') {
+      return;
+    }
+
+    const now = Date.now();
+    const elapsedMinutes = (now - refreshedTeam.teamStartTime) / (1000 * 60);
+    refreshedTeam.minutesElapsed = elapsedMinutes;
+
+    // Periodic waste spawn
+    const lastSpawn = refreshedTeam.lastWasteSpawnTime || refreshedTeam.teamStartTime || now;
+    const spawnIntervalMs = Math.max(1, this.constants.WASTE_SPAWN_INTERVAL_MINUTES) * 60 * 1000;
+    if (now - lastSpawn >= spawnIntervalMs) {
+      this.spawnWaste(refreshedTeam);
+      refreshedTeam.lastWasteSpawnTime = now;
+      refreshedTeam.activityLog.unshift(
+        `[System] New waste batch generated for City ${refreshedTeam.citySlot}`
+      );
+    }
+
+    // Overdue pending-batch penalties
+    let penaltyCount = 0;
+    for (const batch of refreshedTeam.wasteBatches) {
+      if (typeof batch.penalized !== 'boolean') batch.penalized = false;
+      if (batch.status === 'PENDING' && !batch.penalized && now > batch.collectionDeadline) {
+        refreshedTeam.cityHealth = Math.max(
+          0,
+          refreshedTeam.cityHealth - this.constants.OVERDUE_BATCH_HEALTH_PENALTY
+        );
+        batch.penalized = true;
+        penaltyCount += 1;
+      }
+    }
+
+    if (penaltyCount > 0) {
+      refreshedTeam.activityLog.unshift(
+        `[System] ${penaltyCount} overdue waste batch(es). Health -${
+          penaltyCount * this.constants.OVERDUE_BATCH_HEALTH_PENALTY
+        }%`
+      );
+    }
+
+    // Recalculate core team metrics
+    refreshedTeam.wasteInventory = refreshedTeam.wasteBatches
+      .filter((b) => b.status === 'PENDING')
+      .reduce((sum, b) => sum + b.mass, 0);
+
+    // Team timer completion
+        if (elapsedMinutes >= this.constants.TEAM_GAME_DURATION_MINUTES) {
+      refreshedTeam.gameStatus = 'completed';
+      refreshedTeam.totalProjectScore = this.calculateCompletedProjectScore(refreshedTeam.cityProjects);
+    }
+
+
+    // Elimination checks
+    if (refreshedTeam.cityHealth <= 0) {
+      refreshedTeam.isEliminated = true;
+      refreshedTeam.gameStatus = 'eliminated';
+      refreshedTeam.eliminationReason = 'health';
+    }
+
+    if (refreshedTeam.budget < 0 && !refreshedTeam.isEliminated) {
+      const hasAssets =
+        refreshedTeam.materialInventory.length > 0 ||
+        refreshedTeam.marketplaceListing.length > 0 ||
+        refreshedTeam.wasteInventory > 0;
+
+      if (!hasAssets) {
+        refreshedTeam.isEliminated = true;
+        refreshedTeam.gameStatus = 'eliminated';
+        refreshedTeam.eliminationReason = 'budget';
+      }
+    }
+
+    await this.updateTeamData(sessionId, refreshedTeam);
+    await this.checkAllTeamsComplete(sessionId);
+
+    const updatedGameState = await this.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.emitToGameRoom(sessionId, 'system-check-update', {
+        gameState: updatedGameState,
+      });
+    }
   }
 
   // ============================================

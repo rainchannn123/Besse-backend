@@ -97,8 +97,17 @@ export class MRFService {
       `(Refuse: ${refuseMass.toFixed(1)} tons, Disposal: $${dumpingFee.toFixed(0)}, CO2: +${(processingCO2 + landfillCO2).toFixed(1)}t)`
     );
 
-    // ✅ Update team data
+        // ✅ Update team data
     await GameService.updateTeamData(sessionId, team);
+
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'waste-processed', {
+        queueId,
+        batchId: batch.id,
+        batchMass: batch.mass,
+      });
+    }
 
     // ✅ Broadcast player action
     WebSocketService.broadcastPlayerAction(
@@ -192,8 +201,17 @@ export class MRFService {
       }
     }
 
-    // ✅ Update team data
+        // ✅ Update team data
     await GameService.updateTeamData(sessionId, team);
+
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'material-graded', {
+        auctionId,
+        grade,
+        customPrice,
+      });
+    }
 
     // ✅ Broadcast player action
     if (grade === 'F') {

@@ -43,19 +43,22 @@ export const getGameState = asyncHandler(
     // ✅ Check elimination
     await GameService.checkElimination(sessionId);
 
-    // ✅ Get fresh team data after checks
+        // ✅ Get fresh state/team data after checks
+    const refreshedGameState = await GameService.getGameState(sessionId);
     const updatedTeam = await GameService.getTeamData(sessionId);
-    if (!updatedTeam) {
+    if (!refreshedGameState || !updatedTeam) {
       sendResponse(res, 404, 'Team data not found');
       return;
     }
 
     // ✅ Get all teams in room for rankings
-    const allTeams = gameState.teams.map(t => ({
+    const allTeams = refreshedGameState.teams.map(t => ({
+
       teamId: t.teamId,
       teamName: t.teamName,
       citySlot: t.citySlot,
-      totalScore: t.totalProjectScore,
+            totalScore: t.totalProjectScore || 0,
+
       status: t.gameStatus,
       budget: t.budget,
       health: t.cityHealth,
@@ -67,12 +70,14 @@ export const getGameState = asyncHandler(
     const rankings = [...allTeams].sort((a, b) => b.totalScore - a.totalScore);
 
     sendResponse(res, 200, 'Game state retrieved successfully', {
-      gameState,
+            gameState: refreshedGameState,
+
       userRole,
       team: updatedTeam,
       rankings,
       allTeams,
-      teamCount: gameState.teams.length,
+            teamCount: refreshedGameState.teams.length,
+
     });
   }
 );
@@ -112,9 +117,10 @@ export const endTurn = asyncHandler(
     
     if (elapsedMinutes >= teamDurationMinutes) {
       team.gameStatus = 'completed';
-      team.totalProjectScore = team.cityProjects
-        .filter(p => p.completed)
-        .reduce((sum, p) => sum + p.score, 0);
+            team.totalProjectScore = team.cityProjects
+        .filter((p) => p.completed)
+        .reduce((sum, p) => sum + Number(p.score ?? p.scoreBonus ?? 0), 0);
+
       await GameService.updateTeamData(sessionId, team);
       
       sendResponse(res, 200, 'Team timer expired. Game completed.', { team });

@@ -188,8 +188,9 @@ export interface TeamData {
   totalLandfillTons: number;
   maxTeamScore: number;
   // Timer
-  teamStartTime: number;
+    teamStartTime: number;
   minutesElapsed: number;
+  lastWasteSpawnTime?: number;
   gameStatus: TeamStatus;
   // Projects (per team)
   cityProjects: CityProject[];

@@ -7,7 +7,6 @@ import {
 import { GameState } from '../types';
 import { logger } from '../utils/logger';
 import { GameService } from './gameService';
-import Lobby from '../models/Lobby';
 import MatchmakingRoom from '../models/MatchmakingRoom';
 
 export class WebSocketService {
@@ -55,17 +54,6 @@ export class WebSocketService {
           });
 
           socket.join(sessionId);
-
-          // Join team-specific room for teammate-only chat
-          const gameState = await GameService.getGameState(sessionId);
-          const playerTeamRole = this.getPlayerTeamRoleFromSession(gameState, socket.userId);
-          const teamRoomName = this.getTeamRoomName(sessionId, playerTeamRole);
-          if (teamRoomName) {
-            socket.join(teamRoomName);
-            logger.info(
-              `[WebSocket] User ${socket.user?.name} joined team room: ${teamRoomName}`
-            );
-          }
 
           if (!this.gameRooms.has(sessionId)) {
             this.gameRooms.set(sessionId, new Set());
@@ -329,15 +317,7 @@ export class WebSocketService {
             return;
           }
 
-          const gameState = await GameService.getGameState(sessionId);
-          const playerTeamRole = this.getPlayerTeamRoleFromSession(gameState, socket.userId);
-          const teamRoomName = this.getTeamRoomName(sessionId, playerTeamRole);
-          if (!teamRoomName) {
-            socket.emit('error', { message: 'Team chat is not available for this session' });
-            return;
-          }
-
-          this.io.to(teamRoomName).emit('team-chat-message', {
+                    this.io.to(sessionId).emit('team-chat-message', {
             senderId: socket.userId,
             senderName: socket.user?.name || 'Unknown',
             senderRole: socket.user?.role || 'player',
@@ -461,28 +441,7 @@ export class WebSocketService {
     return roomSockets ? roomSockets.size > 0 : false;
   }
 
-  private static getPlayerTeamRoleFromSession(
-    gameState: GameState | null,
-    userId?: string
-  ): 'municipality' | 'mrf' | 'broker' | null {
-    if (!gameState || !userId || !gameState.teams?.length) return null;
-
-    for (const team of gameState.teams) {
-      if (team.players.municipality === userId) return 'municipality';
-      if (team.players.mrf === userId) return 'mrf';
-      if (team.players.broker === userId) return 'broker';
-    }
-
-    return null;
-  }
-
-  private static getTeamRoomName(
-    sessionId: string,
-    role: 'municipality' | 'mrf' | 'broker' | null
-  ): string | null {
-    if (!role) return null;
-    return `${sessionId}:team:${role}`;
-  }
+  
 
   /**
    * Broadcast system messages
@@ -521,24 +480,29 @@ export class WebSocketService {
   /**
    * Broadcast game state update after any action/change
    */
-  static broadcastGameStateUpdate(
+    static broadcastGameStateUpdate(
     sessionId: string,
     gameState: GameState,
     actionType: string,
     actionDetails?: any
   ) {
-    this.io.to(sessionId).emit('game-state-updated', {
-      sessionId,
+    const payload = {
       gameState,
       actionType,
       actionDetails,
-      timestamp: Date.now(),
-    });
+    };
+
+    // Rich action event used by role pages (backward compatible)
+    this.emitToGameRoom(sessionId, 'game-state-updated', payload);
+
+    // Canonical state event used by layout/footer for immediate HUD refresh
+    this.emitToGameRoom(sessionId, 'game-state-update', payload);
 
     logger.info(
       `Broadcasted game state update for session ${sessionId} - Action: ${actionType}`
     );
   }
+
 
   /**
    * Broadcast full game state payload

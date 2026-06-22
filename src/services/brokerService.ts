@@ -1,12 +1,22 @@
 import { Auction, GameState, TeamData } from '../types';
+import { DEFAULT_GAME_CONSTANTS } from '../constants/constants';
 import { GameService } from './gameService';
-import GameSession from '../models/GameSession';
-import MatchmakingRoom from '../models/MatchmakingRoom';
 import { WebSocketService } from './websocketService';
 import { logger } from '../utils/logger';
 
+type AuctionResolutionResult = {
+  finalStatus: 'sold' | 'pending';
+  finalPrice: number;
+  winnerSessionId: string | null;
+  sellerPayout: number;
+  serviceFee: number;
+  returnedToMRF: boolean;
+};
+
 export class BrokerService {
   private static auctionTimers: Map<string, NodeJS.Timeout> = new Map();
+  private static readonly SELLER_PAYOUT_RATE = 0.9;
+
 
   // ============================================
   // SCHEDULE AUCTION RESOLUTION
@@ -35,25 +45,40 @@ export class BrokerService {
         );
         if (!auction) return;
 
-        await this.resolveAuction(gameState, team, auction, sessionId);
-
-        // Update auction status
-        const idx = team.marketplaceListing.findIndex(a => a.auctionId === auctionId);
-        if (idx !== -1) {
-          team.marketplaceListing[idx].status = 'sold';
-        }
+                const resolution = await this.resolveAuction(gameState, team, auction, sessionId);
 
         await GameService.updateTeamData(sessionId, team);
+
         await GameService.updateGameState(sessionId, gameState);
 
-        // Broadcast to all teams in the room
-        this.broadcastToRoom(gameState.roomCode!, 'auction-resolved', {
+                const actionDetails = {
           auctionId,
           materialType: auction.materialType,
           mass: auction.mass,
           winner: auction.highBidder,
-          finalPrice: auction.currentBid,
-        });
+          winnerSessionId: resolution.winnerSessionId,
+          finalPrice: resolution.finalPrice,
+          finalStatus: resolution.finalStatus,
+          sellerPayout: resolution.sellerPayout,
+          serviceFee: resolution.serviceFee,
+          returnedToMRF: resolution.returnedToMRF,
+        };
+
+
+        // Broadcast to all teams in the room
+        this.broadcastToRoom(gameState, 'auction-resolved', actionDetails);
+
+        // Also push authoritative game-state updates to each team session
+        for (const roomTeam of gameState.teams) {
+          const teamGameState = await GameService.getGameState(roomTeam.sessionId);
+          if (teamGameState) {
+            WebSocketService.emitToGameRoom(roomTeam.sessionId, 'game-state-updated', {
+              gameState: teamGameState,
+              actionType: 'auction-resolved',
+              actionDetails,
+            });
+          }
+        }
 
         logger.info(`[BrokerService] Auction ${auctionId} resolved immediately`);
       } catch (err) {
@@ -68,11 +93,16 @@ export class BrokerService {
   // GET ACTIVE AUCTIONS FROM ROOM
   // ============================================
 
-  static async getRoomAuctions(sessionId: string): Promise<any[]> {
+    static async getRoomAuctions(sessionId: string): Promise<any[]> {
     const gameState = await GameService.getGameState(sessionId);
     if (!gameState) return [];
 
     const allAuctions: any[] = [];
+    const sessionRole: Record<string, string> = {};
+
+    for (const t of gameState.teams) {
+      sessionRole[t.sessionId] = `City ${t.citySlot}`;
+    }
 
     for (const team of gameState.teams) {
       const auctions = team.marketplaceListing.filter(
@@ -80,11 +110,21 @@ export class BrokerService {
       );
 
       for (const auction of auctions) {
+        const highBidderTeamRole = auction.highBidderSessionId
+          ? sessionRole[auction.highBidderSessionId] || null
+          : null;
+
+        const winnerTeamRole =
+          auction.status === 'sold' && auction.highBidder ? highBidderTeamRole : null;
+
         allAuctions.push({
           ...auction,
           sellerTeam: team.teamName,
           sellerCitySlot: team.citySlot,
           sellerSessionId: team.sessionId,
+          sellerTeamRole: sessionRole[team.sessionId] || team.teamName,
+          highBidderTeamRole,
+          winnerTeamRole,
         });
       }
     }
@@ -145,8 +185,8 @@ export class BrokerService {
       throw new Error('You cannot bid on your own auction');
     }
 
-    // Calculate new bid
-    const entryPrice = auction.entryPrice;
+        // Calculate new bid
+    const entryPrice = auction.entryPrice ?? auction.currentBid;
     const bidIncrement = entryPrice * this.constants().AUCTION_BID_INCREMENT_RATE;
     const newBidAmount = auction.currentBid + bidIncrement;
 
@@ -191,9 +231,9 @@ export class BrokerService {
     await GameService.updateTeamData(auctionTeamSessionId, auctionTeam);
     await GameService.updateGameState(sessionId, gameState);
 
-    // ✅ Broadcast to ALL teams in the room
+        // ✅ Broadcast to ALL teams in the room
     const timeRemaining = Math.max(0, Math.floor((auction.endTime - Date.now()) / 1000));
-    this.broadcastToRoom(gameState.roomCode!, 'bid-placed', {
+    this.broadcastToRoom(gameState, 'bid-placed', {
       auctionId,
       materialType: auction.materialType,
       newBid: parseFloat(newBidAmount.toFixed(2)),
@@ -203,6 +243,14 @@ export class BrokerService {
       timeRemaining,
     });
 
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'bid-placed', {
+        auctionId,
+        newBid: parseFloat(newBidAmount.toFixed(2)),
+      });
+    }
+
     return team;
   }
 
@@ -210,105 +258,134 @@ export class BrokerService {
   // RESOLVE AUCTION
   // ============================================
 
-  private static async resolveAuction(
+    private static async resolveAuction(
     gameState: GameState,
     team: TeamData,
     auction: Auction,
     sessionId: string
-  ): Promise<void> {
-    if (!auction.highBidder) {
-      // No bids - liquidation
-      const liquidationPrice = auction.currentBid * 0.5;
-      team.budget += liquidationPrice;
+  ): Promise<AuctionResolutionResult> {
+    const finalPrice = auction.currentBid;
+
+    if (!auction.highBidder || !auction.highBidderSessionId) {
+      auction.status = 'pending';
+      auction.endTime = 0;
+      auction.highBidder = null;
+      auction.highBidderSessionId = null;
+      auction.currentBid = auction.entryPrice ?? auction.currentBid;
+
       team.activityLog.unshift(
-        `[Broker] ⚠️ No bids for ${auction.mass.toFixed(1)}t ${auction.materialType}. Liquidated for $${liquidationPrice.toFixed(0)}`
+        `[Broker] No bids for ${auction.mass.toFixed(1)}t ${auction.materialType}. Material returned to MRF Materials Ready.`
       );
-      return;
+
+      return {
+        finalStatus: 'pending',
+        finalPrice,
+        winnerSessionId: null,
+        sellerPayout: 0,
+        serviceFee: 0,
+        returnedToMRF: true,
+      };
     }
 
-    // ✅ Check if it's a self-win or external sale
-    const isSelfWin = auction.highBidderSessionId === auction.originTeam;
+    const buyerSessionId = auction.highBidderSessionId;
+    const buyerTeam = gameState.teams.find((t) => t.sessionId === buyerSessionId);
 
-    if (isSelfWin) {
-      // Internal transfer (same team)
-      team.municipalInventory[auction.materialType] += auction.mass;
+    if (!buyerTeam || buyerTeam.isEliminated || buyerTeam.gameStatus !== 'active') {
+      auction.status = 'pending';
+      auction.endTime = 0;
+      auction.highBidder = null;
+      auction.highBidderSessionId = null;
+      auction.currentBid = auction.entryPrice ?? auction.currentBid;
+
       team.activityLog.unshift(
-        `[Broker] ✅ Secured ${auction.mass.toFixed(1)}t ${auction.materialType} internally at $${auction.currentBid.toFixed(0)}`
+        `[Broker] Winning bidder unavailable for ${auction.mass.toFixed(1)}t ${auction.materialType}. Material returned to MRF Materials Ready.`
       );
-    } else {
-      // External sale - find the buyer's team
-      const buyerSessionId = auction.highBidderSessionId;
-      const buyerTeam = gameState.teams.find(t => t.sessionId === buyerSessionId);
 
-      if (buyerTeam && !buyerTeam.isEliminated) {
-        // Transfer material to buyer
-        buyerTeam.municipalInventory[auction.materialType] += auction.mass;
-        buyerTeam.budget -= auction.currentBid;
-        buyerTeam.activityLog.unshift(
-          `[Broker] ✅ Acquired ${auction.mass.toFixed(1)}t ${auction.materialType} from City ${team.citySlot} for $${auction.currentBid.toFixed(0)}`
-        );
-
-        // Seller receives payment
-        team.budget += auction.currentBid;
-        team.activityLog.unshift(
-          `[Broker] ✅ Sold ${auction.mass.toFixed(1)}t ${auction.materialType} to City ${buyerTeam.citySlot} for $${auction.currentBid.toFixed(0)}`
-        );
-
-        // // Winning team must pay the final bid from its budget
-        // gameState.budget -= auction.currentBid;
-
-        // Record transaction for seller
-        team.transactions.push({
-          id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          turn: 1,
-          buyer: `City ${buyerTeam.citySlot}`,
-          seller: `City ${team.citySlot}`,
-          itemType: auction.materialType,
-          itemId: auction.auctionId,
-          mass: auction.mass,
-          price: auction.currentBid,
-          transactionType: 'external_sale',
-          revenue: auction.currentBid,
-        });
-
-        // Record transaction for buyer
-        buyerTeam.transactions.push({
-          id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          turn: 1,
-          buyer: `City ${buyerTeam.citySlot}`,
-          seller: `City ${team.citySlot}`,
-          itemType: auction.materialType,
-          itemId: auction.auctionId,
-          mass: auction.mass,
-          price: auction.currentBid,
-          transactionType: 'external_sale',
-          revenue: -auction.currentBid,
-        });
-
-        await GameService.updateTeamData(buyerTeam.sessionId, buyerTeam);
-      } else {
-        // Buyer team not found or eliminated - liquidation
-        const liquidationPrice = auction.currentBid * 0.5;
-        team.budget += liquidationPrice;
-        team.activityLog.unshift(
-          `[Broker] ⚠️ Buyer team eliminated. Liquidated ${auction.mass.toFixed(1)}t ${auction.materialType} for $${liquidationPrice.toFixed(0)}`
-        );
-      }
+      return {
+        finalStatus: 'pending',
+        finalPrice,
+        winnerSessionId: null,
+        sellerPayout: 0,
+        serviceFee: 0,
+        returnedToMRF: true,
+      };
     }
 
-    // Mark auction as sold
+    // Winning team pays full bid. Seller receives 90%; 10% is marketplace service fee.
+    const sellerPayout = parseFloat((finalPrice * this.SELLER_PAYOUT_RATE).toFixed(2));
+    const serviceFee = parseFloat((finalPrice - sellerPayout).toFixed(2));
+
+    buyerTeam.municipalInventory[auction.materialType] += auction.mass;
+    buyerTeam.budget -= finalPrice;
+
+    if (buyerTeam.activeBids && auction.highBidder) {
+      buyerTeam.activeBids[auction.highBidder] = Math.max(
+        0,
+        (buyerTeam.activeBids[auction.highBidder] || 1) - 1
+      );
+    }
+
+    buyerTeam.activityLog.unshift(
+      `[Broker] Acquired ${auction.mass.toFixed(1)}t ${auction.materialType} from City ${team.citySlot} for $${finalPrice.toFixed(0)}`
+    );
+
+    team.budget += sellerPayout;
+    team.activityLog.unshift(
+      `[Broker] Sold ${auction.mass.toFixed(1)}t ${auction.materialType} to City ${buyerTeam.citySlot} for $${finalPrice.toFixed(0)} (Payout: $${sellerPayout.toFixed(0)}, Fee: $${serviceFee.toFixed(0)})`
+    );
+
+    const txId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    team.transactions.push({
+      id: txId,
+      turn: 1,
+      buyer: `City ${buyerTeam.citySlot}`,
+      seller: `City ${team.citySlot}`,
+      itemType: auction.materialType,
+      itemId: auction.auctionId,
+      mass: auction.mass,
+      price: finalPrice,
+      transactionType: 'external_sale',
+      revenue: sellerPayout,
+    });
+
+    buyerTeam.transactions.push({
+      id: `${txId}-b`,
+      turn: 1,
+      buyer: `City ${buyerTeam.citySlot}`,
+      seller: `City ${team.citySlot}`,
+      itemType: auction.materialType,
+      itemId: auction.auctionId,
+      mass: auction.mass,
+      price: finalPrice,
+      transactionType: 'external_sale',
+      revenue: -finalPrice,
+    });
+
     auction.status = 'sold';
+
+    await GameService.updateTeamData(buyerTeam.sessionId, buyerTeam);
+
+    return {
+      finalStatus: 'sold',
+      finalPrice,
+      winnerSessionId: buyerSessionId,
+      sellerPayout,
+      serviceFee,
+      returnedToMRF: false,
+    };
   }
+
 
   // ============================================
   // BUY FROM EXTERNAL WHOLESALER
   // ============================================
 
-  static async buyFromExternalWholesaler(
+    static async buyFromExternalWholesaler(
     sessionId: string,
     materialType: 'paper' | 'plastic' | 'metal' | 'glass' | 'wood',
     requestedAmount: number,
-    playerId: string
+    _playerId: string
   ): Promise<TeamData> {
     const team = await GameService.getTeamData(sessionId);
     if (!team) throw new Error('Team not found');
@@ -344,6 +421,16 @@ export class BrokerService {
     }
 
     await GameService.updateTeamData(sessionId, team);
+
+    const updatedGameState = await GameService.getGameState(sessionId);
+    if (updatedGameState) {
+      WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'external-purchase', {
+        materialType,
+        requestedAmount,
+        cost,
+      });
+    }
+
     return team;
   }
 
@@ -386,14 +473,46 @@ export class BrokerService {
       auction => auction.status === 'active' && auction.endTime <= now
     );
 
+        const resolutionResults: Array<{ auction: Auction; resolution: AuctionResolutionResult }> = [];
+
     for (const auction of expiredAuctions) {
-      await this.resolveAuction(gameState, team, auction, sessionId);
-      auction.status = 'sold';
+      const resolution = await this.resolveAuction(gameState, team, auction, sessionId);
+      resolutionResults.push({ auction, resolution });
     }
 
-    if (expiredAuctions.length > 0) {
+
+        if (expiredAuctions.length > 0) {
       await GameService.updateTeamData(sessionId, team);
       await GameService.updateGameState(sessionId, gameState);
+
+            for (const { auction, resolution } of resolutionResults) {
+        const actionDetails = {
+          auctionId: auction.auctionId,
+          materialType: auction.materialType,
+          mass: auction.mass,
+          winner: auction.highBidder,
+          winnerSessionId: resolution.winnerSessionId,
+          finalPrice: resolution.finalPrice,
+          finalStatus: resolution.finalStatus,
+          sellerPayout: resolution.sellerPayout,
+          serviceFee: resolution.serviceFee,
+          returnedToMRF: resolution.returnedToMRF,
+        };
+
+
+        this.broadcastToRoom(gameState, 'auction-resolved', actionDetails);
+
+        for (const roomTeam of gameState.teams) {
+          const teamGameState = await GameService.getGameState(roomTeam.sessionId);
+          if (teamGameState) {
+            WebSocketService.emitToGameRoom(roomTeam.sessionId, 'game-state-updated', {
+              gameState: teamGameState,
+              actionType: 'auction-resolved',
+              actionDetails,
+            });
+          }
+        }
+      }
     }
 
     return team;
@@ -403,23 +522,24 @@ export class BrokerService {
   // HELPER METHODS
   // ============================================
 
-  private static constants() {
-    return require('../constants/constants').DEFAULT_GAME_CONSTANTS;
+    private static constants() {
+    return DEFAULT_GAME_CONSTANTS;
   }
 
-  private static broadcastToRoom(roomCode: string, event: string, data: any) {
-    WebSocketService.broadcastToAll(event, {
-      ...data,
-      roomCode,
-      timestamp: Date.now(),
-    });
+  private static broadcastToRoom(gameState: GameState, event: string, data: any) {
+    for (const team of gameState.teams) {
+      WebSocketService.emitToGameRoom(team.sessionId, event, {
+        ...data,
+        roomCode: gameState.roomCode,
+      });
+    }
   }
 
   // ============================================
   // LEGACY METHODS (Kept for compatibility)
   // ============================================
 
-  static async getActiveAuctionsFromStates(gameStates: GameState[]): Promise<any[]> {
+    static async getActiveAuctionsFromStates(_gameStates: GameState[]): Promise<any[]> {
     // Legacy - will be phased out
     return [];
   }

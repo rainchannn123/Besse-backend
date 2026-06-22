@@ -18,6 +18,7 @@ router.use(protect);
 const placeBidSchema = z.object({
   body: z.object({
     auctionId: z.string().min(1, 'Auction ID is required'),
+    sessionId: z.string().min(1, 'Session ID is required').optional(),
   }),
 });
 
