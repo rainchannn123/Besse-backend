@@ -76,6 +76,8 @@ export interface ActiveTransport {
   cost: number;
   co2Emission: number;
   status: 'in-transit' | 'completed';
+  purpose?: 'waste-to-mrf' | 'mrf-to-municipality';
+  materialType?: MaterialType;
 }
 
 // ============================================

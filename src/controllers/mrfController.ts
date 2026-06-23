@@ -53,7 +53,25 @@ export const assignGrade = asyncHandler(
   }
 );
 
+export const sendToLandfill = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { queueId, sessionId }: ProcessWasteInput = req.body;
+    const userId = (req as any).user._id;
+
+    const userRole = await GameService.getPlayerRole(sessionId, userId);
+    if (userRole !== 'mrf') {
+      sendResponse(res, 403, 'Only MRF player can send waste to landfill');
+      return;
+    }
+
+    const gameState = await MRFService.sendToLandfill(sessionId, queueId, userId);
+
+    sendResponse(res, 200, 'Waste sent to landfill successfully', { gameState });
+  }
+);
+
 export const getQueue = asyncHandler(
+
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
@@ -142,5 +160,28 @@ export const getPendingAuctions = asyncHandler(
     sendResponse(res, 200, 'Pending auctions retrieved successfully', {
       pendingAuctions,
     });
+  }
+);
+
+export const sendBackToMunicipality = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { sessionId } = req.params;
+    const { auctionId, mode } = req.body;
+    const userId = (req as any).user._id;
+
+    const userRole = await GameService.getPlayerRole(sessionId, userId);
+    if (userRole !== 'mrf') {
+      sendResponse(res, 403, 'Only MRF player can send materials back to municipality');
+      return;
+    }
+
+    const gameState = await MRFService.sendBackToMunicipalityWithTransport(
+      sessionId,
+      auctionId,
+      userId,
+      mode
+    );
+
+    sendResponse(res, 200, `${mode} transport started successfully`, { gameState });
   }
 );

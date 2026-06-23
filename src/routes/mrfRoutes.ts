@@ -2,10 +2,13 @@ import { Router } from 'express';
 import {
   assignGrade,
   getMRFInventory,
-  getPendingAuctions,
-  getQueue,
+    getPendingAuctions,
+    getQueue,
   processWaste,
+  sendBackToMunicipality,
+  sendToLandfill,
 } from '../controllers/mrfController';
+
 import { protect } from '../middleware/auth';
 import { validate } from '../utils/validation';
 import { z } from 'zod';
@@ -31,6 +34,17 @@ const assignGradeSchema = z.object({
   }),
 });
 
+const sendBackToMunicipalitySchema = z.object({
+  body: z.object({
+    auctionId: z.string().min(1, 'Auction ID is required'),
+    sessionId: z.string().min(1, 'Session ID is required'),
+    mode: z.enum(['fast', 'slow']),
+  }),
+  params: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
+
 /**
  * @swagger
  * /api/mrf/process-waste:
@@ -41,6 +55,8 @@ const assignGradeSchema = z.object({
  *       - bearerAuth: []
  */
 router.post('/process-waste', validate(processWasteSchema), processWaste);
+router.post('/to-landfill', validate(processWasteSchema), sendToLandfill);
+
 
 /**
  * @swagger
@@ -52,6 +68,11 @@ router.post('/process-waste', validate(processWasteSchema), processWaste);
  *       - bearerAuth: []
  */
 router.post('/assign-grade', validate(assignGradeSchema), assignGrade);
+router.post(
+  '/send-back-to-municipality/:sessionId',
+  validate(sendBackToMunicipalitySchema),
+  sendBackToMunicipality
+);
 
 /**
  * @swagger

@@ -861,10 +861,13 @@ export class GameService {
     const team = await this.getTeamData(sessionId);
     if (!team) return;
 
-    // Process in-flight transports first (30s/60s delivery)
+        // Process in-flight transports first (30s/60s delivery)
     try {
       const { MunicipalityService } = await import('./municipalityService');
       await MunicipalityService.completeAllTransports(sessionId);
+
+      const { MRFService } = await import('./mrfService');
+      await MRFService.completeMrfMaterialTransports(sessionId);
     } catch (error) {
       logger.error(`[GameService] Transport completion check failed for ${sessionId}`, error);
     }
@@ -880,7 +883,7 @@ export class GameService {
 
     // Periodic waste spawn
     const lastSpawn = refreshedTeam.lastWasteSpawnTime || refreshedTeam.teamStartTime || now;
-    const spawnIntervalMs = Math.max(1, this.constants.WASTE_SPAWN_INTERVAL_MINUTES) * 60 * 1000;
+    const spawnIntervalMs = Math.max(1/60, this.constants.WASTE_SPAWN_INTERVAL_MINUTES) * 60 * 1000;
     if (now - lastSpawn >= spawnIntervalMs) {
       this.spawnWaste(refreshedTeam);
       refreshedTeam.lastWasteSpawnTime = now;

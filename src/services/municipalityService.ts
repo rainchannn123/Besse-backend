@@ -70,7 +70,7 @@ export class MunicipalityService {
     batch.playerId = playerId;
 
     const now = Date.now();
-    const activeTransport: ActiveTransport = {
+        const activeTransport: ActiveTransport = {
       id: `transport-${uuidv4().slice(0, 8)}`,
       batchId: batch.id,
       wasteBatch: { ...batch },
@@ -80,6 +80,7 @@ export class MunicipalityService {
       cost: transportCost,
       co2Emission: transportCO2,
       status: 'in-transit',
+      purpose: 'waste-to-mrf',
     };
 
         if (!team.activeTransports) {
@@ -124,10 +125,12 @@ export class MunicipalityService {
           transportId: activeTransport.id,
           mode: mode,
           batchMass: batch.mass,
-          batchOrigin: batch.origin,
+                    batchOrigin: batch.origin,
           durationMs: this.TRANSPORT_DURATIONS[mode],
           endTime: activeTransport.endTime,
           activeCount: team.activeTransports.length,
+          source: 'municipality',
+          destination: 'mrf',
         }
       );
     }
@@ -154,12 +157,23 @@ export class MunicipalityService {
 
         const now = Date.now();
     let hasChanges = false;
-    const completedTransports: Array<{ batchId: string; batchMass: number; mode: 'fast' | 'slow'; activeCount: number }> = [];
+    const completedTransports: Array<{
+      batchId: string;
+      batchMass: number;
+      mode: 'fast' | 'slow';
+      activeCount: number;
+      source: 'municipality';
+      destination: 'mrf';
+    }> = [];
 
     for (let i = team.activeTransports.length - 1; i >= 0; i--) {
       const transport = team.activeTransports[i];
       
-      if (transport.status === 'in-transit' && now >= transport.endTime) {
+      if (
+        transport.status === 'in-transit' &&
+        now >= transport.endTime &&
+        (transport.purpose === 'waste-to-mrf' || !transport.purpose)
+      ) {
         transport.status = 'completed';
         
         const batch = transport.wasteBatch;
@@ -188,9 +202,11 @@ export class MunicipalityService {
                 hasChanges = true;
                 completedTransports.push({
                   batchId: batch.id,
-                  batchMass: batch.mass,
+                                    batchMass: batch.mass,
                   mode: transport.mode,
                   activeCount: team.activeTransports.length,
+                  source: 'municipality',
+                  destination: 'mrf',
                 });
 
                 const timerKey = `${sessionId}:${transport.id}`;
