@@ -101,9 +101,12 @@ export interface GameConstants {
   CO2_DUMPING_FACTOR_PER_TON_MIN: number;
   CO2_FACTOR_TRANSPORT: number;
   CO2_FACTOR_LANDFILL: number;
-  TRANSPORT_COST_PER_TON_KM: number;
+    TRANSPORT_COST_PER_TON_KM: number;
+  TRANSPORT_FAST_DURATION_SECONDS: number;
+  TRANSPORT_SLOW_DURATION_SECONDS: number;
   DUMPING_FEE: number;
   OPERATING_COST: number;
+
   MATERIAL_PROPERTIES: {
     paper: { 
       basePrice: number; 

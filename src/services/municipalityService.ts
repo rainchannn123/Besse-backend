@@ -12,10 +12,11 @@ export class MunicipalityService {
     slow: 25,
   };
 
-  private static readonly TRANSPORT_DURATIONS = {
-    fast: 30 * 1000,
-    slow: 60 * 1000,
+    private static readonly TRANSPORT_DURATIONS = {
+    fast: DEFAULT_GAME_CONSTANTS.TRANSPORT_FAST_DURATION_SECONDS * 1000,
+    slow: DEFAULT_GAME_CONSTANTS.TRANSPORT_SLOW_DURATION_SECONDS * 1000,
   };
+
 
   private static transportTimers: Map<string, NodeJS.Timeout> = new Map();
 

@@ -861,7 +861,8 @@ export class GameService {
     const team = await this.getTeamData(sessionId);
     if (!team) return;
 
-        // Process in-flight transports first (30s/60s delivery)
+                // Process in-flight transports first (fast/slow delivery)
+
     try {
       const { MunicipalityService } = await import('./municipalityService');
       await MunicipalityService.completeAllTransports(sessionId);
