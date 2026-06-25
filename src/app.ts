@@ -21,6 +21,7 @@ import mrfRoutes from './routes/mrfRoutes';
 import municipalityRoutes from './routes/municipalityRoutes';
 import { GameService } from './services/gameService';
 import { LobbyService } from './services/lobbyService';
+import { AdminMonitorTelemetryService } from './services/adminMonitorTelemetryService';
 import { WebSocketService } from './services/websocketService';
 import { NotFoundError } from './utils/AppError';
 import { logger } from './utils/logger';
@@ -131,6 +132,16 @@ const io = new SocketIOServer(server, {
 // Initialize WebSocket service
 WebSocketService.initialize(io);
 
+if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
+  const telemetryIntervalMs = Math.max(
+    5_000,
+    Number(env.ADMIN_MONITOR_TELEMETRY_INTERVAL_MS) || 30_000
+  );
+
+  // Admin monitor telemetry snapshots (default every 30 seconds for started rooms)
+  AdminMonitorTelemetryService.startScheduledSnapshots(telemetryIntervalMs);
+}
+
 // Scheduled system checks (every 30 seconds)
 const SYSTEM_CHECK_INTERVAL = 30 * 1000;
 
@@ -221,6 +232,16 @@ server.listen(PORT, () => {
   logger.info(`Besse Backend server running on port ${PORT}`);
   logger.info(`WebSocket server initialized`);
   logger.info(`System checks scheduled every ${SYSTEM_CHECK_INTERVAL / 1000} seconds`);
+
+  if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
+    logger.info(
+      `Admin monitor telemetry snapshots scheduled every ${Math.max(
+        5_000,
+        Number(env.ADMIN_MONITOR_TELEMETRY_INTERVAL_MS) || 30_000
+      ) / 1000} seconds`
+    );
+  }
+
 });
 
 export default app;

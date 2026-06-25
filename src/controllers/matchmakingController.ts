@@ -259,9 +259,19 @@ export const getRoomRankings = asyncHandler(
 
 export const adminGetAllRooms = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const rooms = await MatchmakingRoom.find({
-      status: { $in: ['waiting', 'ready'] },
-    }).sort({ createdAt: -1 });
+    const requestedStatus = String(req.query.status || '').trim();
+    const allowedStatuses = new Set(['waiting', 'ready', 'started', 'completed']);
+
+    const statuses = requestedStatus
+      ? requestedStatus
+          .split(',')
+          .map((value) => value.trim().toLowerCase())
+          .filter((value) => allowedStatuses.has(value))
+      : [];
+
+    const filter = statuses.length > 0 ? { status: { $in: statuses } } : {};
+
+    const rooms = await MatchmakingRoom.find(filter).sort({ createdAt: -1 });
 
     const sanitizedRooms = rooms.map(room => MatchmakingService.sanitizeRoom(room));
 

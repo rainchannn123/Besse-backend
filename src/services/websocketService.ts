@@ -12,6 +12,11 @@ import MatchmakingRoom from '../models/MatchmakingRoom';
 export class WebSocketService {
   private static io: SocketIOServer;
   private static gameRooms: Map<string, Set<string>> = new Map();
+  private static readonly ADMIN_MONITOR_ROOM_PREFIX = 'admin-monitor-';
+
+    private static getAdminMonitorRoomName(roomCode: string): string {
+    return `${this.ADMIN_MONITOR_ROOM_PREFIX}${String(roomCode || '').trim().toUpperCase()}`;
+  }
 
   static initialize(io: SocketIOServer) {
     this.io = io;
@@ -75,9 +80,47 @@ export class WebSocketService {
         }
       });
 
+      socket.on('join-admin-monitor-room', (data: { roomCode: string }) => {
+        const normalizedRoomCode = String(data?.roomCode || '').trim().toUpperCase();
+
+        if (!normalizedRoomCode) {
+          socket.emit('error', { message: 'Room code is required' });
+          return;
+        }
+
+        if (socket.user?.accountType !== 'admin') {
+          socket.emit('error', { message: 'Admin access required for live monitor' });
+          return;
+        }
+
+        const monitorRoom = this.getAdminMonitorRoomName(normalizedRoomCode);
+        socket.join(monitorRoom);
+
+        socket.emit('joined-admin-monitor-room', {
+          roomCode: normalizedRoomCode,
+        });
+
+        logger.info(
+          `[WebSocket] ✅ Admin ${socket.user?.name} (${socket.userId}) joined admin monitor room: ${normalizedRoomCode}`
+        );
+      });
+
+      socket.on('leave-admin-monitor-room', (data: { roomCode: string }) => {
+        const normalizedRoomCode = String(data?.roomCode || '').trim().toUpperCase();
+        if (!normalizedRoomCode) return;
+
+        const monitorRoom = this.getAdminMonitorRoomName(normalizedRoomCode);
+        socket.leave(monitorRoom);
+
+        logger.info(
+          `[WebSocket] Admin ${socket.user?.name} (${socket.userId}) left admin monitor room: ${normalizedRoomCode}`
+        );
+      });
+
       socket.on('join-matchmaking-room', async (data: { roomCode: string }) => {
         const { roomCode } = data;
         const userId = socket.userId!;
+
 
         logger.info(
           `[WebSocket] join-matchmaking-room event received: roomCode=${roomCode}, userId=${userId}`
@@ -477,10 +520,10 @@ export class WebSocketService {
     });
   }
 
-  /**
+    /**
    * Broadcast game state update after any action/change
    */
-    static broadcastGameStateUpdate(
+  static broadcastGameStateUpdate(
     sessionId: string,
     gameState: GameState,
     actionType: string,
@@ -498,16 +541,49 @@ export class WebSocketService {
     // Canonical state event used by layout/footer for immediate HUD refresh
     this.emitToGameRoom(sessionId, 'game-state-update', payload);
 
+    if (gameState?.roomCode) {
+      this.emitAdminTelemetryUpdate(gameState.roomCode, {
+        actionType,
+        source: 'game-state-update',
+        sessionId,
+      });
+    }
+
     logger.info(
       `Broadcasted game state update for session ${sessionId} - Action: ${actionType}`
     );
   }
 
+  static emitAdminTelemetryUpdate(
+
+    roomCode: string,
+        payload: {
+      actionType?: string;
+      source?: string;
+      sessionId?: string | null;
+      [key: string]: any;
+    } = {}
+  ) {
+    if (!this.io) return;
+
+    const normalizedRoomCode = String(roomCode || '').trim().toUpperCase();
+    if (!normalizedRoomCode) return;
+
+    const monitorRoom = this.getAdminMonitorRoomName(normalizedRoomCode);
+    this.io.to(monitorRoom).emit('admin:room-telemetry-updated', {
+      roomCode: normalizedRoomCode,
+      actionType: payload.actionType || null,
+      source: payload.source || 'unknown',
+      sessionId: payload.sessionId || null,
+      ...payload,
+      timestamp: Date.now(),
+    });
+  }
 
   /**
    * Broadcast full game state payload
    */
-  static broadcastFullGameState(
+    static broadcastFullGameState(
     sessionId: string,
     payload: Record<string, any>,
     eventName: string = 'game-state-full'

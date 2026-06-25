@@ -38,11 +38,12 @@ export const socketAuthMiddleware = async (
 
     // Attach user info to socket
     socket.userId = user._id.toString();
-    socket.user = {
+        socket.user = {
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
+      accountType: user.accountType,
     };
 
     next();

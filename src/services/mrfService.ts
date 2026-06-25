@@ -5,6 +5,7 @@ import { BrokerService } from './brokerService';
 import { CalculationService } from './calculationService';
 import { GameService } from './gameService';
 import { WebSocketService } from './websocketService';
+import { AdminMonitorTelemetryService } from './adminMonitorTelemetryService';
 
 export class MRFService {
   private static readonly TRANSPORT_COSTS = {
@@ -116,14 +117,56 @@ export class MRFService {
         // ✅ Update team data
     await GameService.updateTeamData(sessionId, team);
 
-    const updatedGameState = await GameService.getGameState(sessionId);
+        const updatedGameState = await GameService.getGameState(sessionId);
     if (updatedGameState) {
       WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'waste-processed', {
         queueId,
         batchId: batch.id,
         batchMass: batch.mass,
       });
+
+      const roomCode = updatedGameState.roomCode;
+      const gameTeam = updatedGameState.teams?.find((t: any) => t.sessionId === sessionId);
+      if (roomCode && gameTeam?.teamId) {
+        for (const material of materials) {
+          await AdminMonitorTelemetryService.logMaterialFlowEvent({
+            roomCode,
+            teamId: gameTeam.teamId,
+            sessionId,
+            citySlot: gameTeam.citySlot || 0,
+            flowClass: 'material',
+            source: 'mrf.processed_waste',
+            destination: 'mrf.pending_auction',
+            materialType: material.type,
+            amount: material.mass,
+            metadata: {
+              action: 'mrf.process-waste',
+              batchId: batch.id,
+              queueId,
+            },
+          });
+        }
+
+        if (refuseMass > 0) {
+          await AdminMonitorTelemetryService.logWasteBatchToDestination({
+            roomCode,
+            teamId: gameTeam.teamId,
+            sessionId,
+            citySlot: gameTeam.citySlot || 0,
+            source: 'mrf.processed_waste',
+            destination: 'landfill',
+            mass: refuseMass,
+            composition: batch.composition as any,
+            metadata: {
+              action: 'mrf.process-waste.refuse',
+              batchId: batch.id,
+              queueId,
+            },
+          });
+        }
+      }
     }
+
 
     // ✅ Broadcast player action
     WebSocketService.broadcastPlayerAction(
@@ -189,7 +232,7 @@ export class MRFService {
 
     await GameService.updateTeamData(sessionId, team);
 
-    const updatedGameState = await GameService.getGameState(sessionId);
+        const updatedGameState = await GameService.getGameState(sessionId);
     if (updatedGameState) {
       WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'waste-landfilled', {
         queueId,
@@ -198,7 +241,28 @@ export class MRFService {
         landfillFee,
         landfillCO2,
       });
+
+      const roomCode = updatedGameState.roomCode;
+      const gameTeam = updatedGameState.teams?.find((t: any) => t.sessionId === sessionId);
+      if (roomCode && gameTeam?.teamId) {
+        await AdminMonitorTelemetryService.logWasteBatchToDestination({
+          roomCode,
+          teamId: gameTeam.teamId,
+          sessionId,
+          citySlot: gameTeam.citySlot || 0,
+          source: 'mrf.queue',
+          destination: 'landfill',
+          mass: batch.mass,
+          composition: batch.composition as any,
+          metadata: {
+            action: 'mrf.send-to-landfill',
+            batchId: batch.id,
+            queueId,
+          },
+        });
+      }
     }
+
 
     WebSocketService.broadcastPlayerAction(
       sessionId,
@@ -295,14 +359,38 @@ export class MRFService {
         // ✅ Update team data
     await GameService.updateTeamData(sessionId, team);
 
-    const updatedGameState = await GameService.getGameState(sessionId);
+        const updatedGameState = await GameService.getGameState(sessionId);
     if (updatedGameState) {
       WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'material-graded', {
         auctionId,
         grade,
         customPrice,
       });
+
+      if (grade === 'F') {
+        const roomCode = updatedGameState.roomCode;
+        const gameTeam = updatedGameState.teams?.find((t: any) => t.sessionId === sessionId);
+        if (roomCode && gameTeam?.teamId) {
+          await AdminMonitorTelemetryService.logMaterialFlowEvent({
+            roomCode,
+            teamId: gameTeam.teamId,
+            sessionId,
+            citySlot: gameTeam.citySlot || 0,
+            flowClass: 'material',
+            source: 'mrf.pending_auction',
+            destination: 'landfill',
+            materialType: auction.materialType,
+            amount: auction.mass,
+            metadata: {
+              action: 'mrf.assign-grade',
+              grade,
+              auctionId,
+            },
+          });
+        }
+      }
     }
+
 
         // ✅ Broadcast player action
     if (grade === 'F') {

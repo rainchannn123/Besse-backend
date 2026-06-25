@@ -5,6 +5,7 @@ import {
   forceExitPlayer,
   getAdminMonitoringOverview,
   getPlayerGameHistory,
+  getRoomLiveOverview,
 } from '../services/adminService';
 import { ActivityLogService } from '../services/activityLogService';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -52,18 +53,29 @@ export const playerHistory = asyncHandler(
   }
 );
 
-// ✅ NEW: Get all teams in a specific room for admin monitoring
-export const getRoomTeams = asyncHandler(
+export const roomLiveOverview = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { roomCode } = req.params;
-    
-    // This would need to be implemented in adminService
-    // For now, return a placeholder
-    sendResponse(res, 200, 'Room teams retrieved', { 
-      roomCode,
-      teams: [],
-      message: 'Admin monitoring for all teams in room' 
+
+        const flowLimit = req.query.flowLimit ? Number(req.query.flowLimit) : undefined;
+    const flowFrom = req.query.flowFrom ? new Date(String(req.query.flowFrom)) : undefined;
+    const flowTo = req.query.flowTo ? new Date(String(req.query.flowTo)) : undefined;
+
+    const includeFlowEvents = req.query.includeFlowEvents;
+    const parsedIncludeFlowEvents =
+      includeFlowEvents === undefined
+        ? undefined
+        : ['1', 'true', 'yes'].includes(String(includeFlowEvents).toLowerCase());
+
+    const data = await getRoomLiveOverview(roomCode, {
+      flowLimit: Number.isFinite(flowLimit) ? flowLimit : undefined,
+      flowFrom: flowFrom && !isNaN(flowFrom.getTime()) ? flowFrom : undefined,
+      flowTo: flowTo && !isNaN(flowTo.getTime()) ? flowTo : undefined,
+      includeFlowEvents: parsedIncludeFlowEvents,
     });
+
+
+    sendResponse(res, 200, 'Room live overview retrieved', data);
   }
 );
 

@@ -5,6 +5,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '../utils/AppErro
 import { CalculationService } from './calculationService';
 import { GameService } from './gameService';
 import { WebSocketService } from './websocketService';
+import { AdminMonitorTelemetryService } from './adminMonitorTelemetryService';
 
 export class MunicipalityService {
   private static readonly TRANSPORT_COSTS = {
@@ -200,22 +201,22 @@ export class MunicipalityService {
           `[System] ${transport.mode.toUpperCase()} transport completed! ${batch.mass.toFixed(1)} tons of ${batch.origin} waste delivered to MRF.`
         );
 
-                hasChanges = true;
-                completedTransports.push({
-                  batchId: batch.id,
-                                    batchMass: batch.mass,
-                  mode: transport.mode,
-                  activeCount: team.activeTransports.length,
-                  source: 'municipality',
-                  destination: 'mrf',
-                });
+                        hasChanges = true;
+        completedTransports.push({
+          batchId: batch.id,
+          batchMass: batch.mass,
+          mode: transport.mode,
+          activeCount: team.activeTransports.length,
+          source: 'municipality',
+          destination: 'mrf',
+        });
 
-                const timerKey = `${sessionId}:${transport.id}`;
-                const existingTimer = this.transportTimers.get(timerKey);
-                if (existingTimer) {
-                  clearTimeout(existingTimer);
-                  this.transportTimers.delete(timerKey);
-                }
+        const timerKey = `${sessionId}:${transport.id}`;
+        const existingTimer = this.transportTimers.get(timerKey);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+          this.transportTimers.delete(timerKey);
+        }
       }
     }
 
@@ -274,11 +275,31 @@ export class MunicipalityService {
         await GameService.updateTeamData(sessionId, team);
 
     const updatedGameState = await GameService.getGameState(sessionId);
-    if (updatedGameState) {
+        if (updatedGameState) {
       WebSocketService.broadcastGameStateUpdate(sessionId, updatedGameState, 'waste-rejected', {
         batchId: batch.id,
         batchMass: batch.mass,
       });
+
+      const roomCode = updatedGameState.roomCode;
+      const gameTeam = updatedGameState.teams?.find((t: any) => t.sessionId === sessionId);
+      if (roomCode && gameTeam?.teamId) {
+        await AdminMonitorTelemetryService.logWasteBatchToDestination({
+          roomCode,
+          teamId: gameTeam.teamId,
+          sessionId,
+          citySlot: gameTeam.citySlot || 0,
+          source: 'municipality.pending_waste',
+          destination: 'landfill',
+          mass: batch.mass,
+          composition: batch.composition as any,
+          metadata: {
+            action: 'municipality.reject-waste',
+            batchId: batch.id,
+            origin: batch.origin,
+          },
+        });
+      }
     }
 
     return team;
@@ -371,7 +392,7 @@ export class MunicipalityService {
     await GameService.updateTeamData(sessionId, team);
 
     const updatedGameState = await GameService.getGameState(sessionId);
-    if (updatedGameState) {
+        if (updatedGameState) {
       WebSocketService.broadcastGameStateUpdate(
         sessionId,
         updatedGameState,
@@ -384,7 +405,34 @@ export class MunicipalityService {
           completed: project.completed,
         }
       );
+
+      const roomCode = updatedGameState.roomCode;
+      const gameTeam = updatedGameState.teams?.find((t: any) => t.sessionId === sessionId);
+      const normalizedMaterialType = ['paper', 'metal', 'plastic', 'wood', 'glass'].includes(materialType)
+        ? (materialType as 'paper' | 'metal' | 'plastic' | 'wood' | 'glass')
+        : null;
+
+      if (roomCode && gameTeam?.teamId && normalizedMaterialType) {
+        await AdminMonitorTelemetryService.logMaterialFlowEvent({
+          roomCode,
+          teamId: gameTeam.teamId,
+          sessionId,
+          citySlot: gameTeam.citySlot || 0,
+          flowClass: 'material',
+          source: 'municipality.inventory',
+          destination: `project:${project.id}`,
+          materialType: normalizedMaterialType,
+          amount: materialAmount,
+          metadata: {
+            action: 'municipality.construct-project',
+            projectId: project.id,
+            projectName: project.name,
+            completed: project.completed,
+          },
+        });
+      }
     }
+
 
     // Broadcast updates
     WebSocketService.broadcastPlayerAction(

@@ -68,7 +68,7 @@ export class BrokerService {
         // Broadcast to all teams in the room
         this.broadcastToRoom(gameState, 'auction-resolved', actionDetails);
 
-        // Also push authoritative game-state updates to each team session
+                // Also push authoritative game-state updates to each team session
         for (const roomTeam of gameState.teams) {
           const teamGameState = await GameService.getGameState(roomTeam.sessionId);
           if (teamGameState) {
@@ -80,7 +80,17 @@ export class BrokerService {
           }
         }
 
+        if (gameState.roomCode) {
+          WebSocketService.emitAdminTelemetryUpdate(gameState.roomCode, {
+            actionType: 'auction-resolved',
+            source: 'broker',
+            sessionId,
+            auctionId,
+          });
+        }
+
         logger.info(`[BrokerService] Auction ${auctionId} resolved immediately`);
+
       } catch (err) {
         logger.error(`[BrokerService] Failed to resolve auction ${auctionId}:`, err);
       }
@@ -502,7 +512,7 @@ export class BrokerService {
 
         this.broadcastToRoom(gameState, 'auction-resolved', actionDetails);
 
-        for (const roomTeam of gameState.teams) {
+                for (const roomTeam of gameState.teams) {
           const teamGameState = await GameService.getGameState(roomTeam.sessionId);
           if (teamGameState) {
             WebSocketService.emitToGameRoom(roomTeam.sessionId, 'game-state-updated', {
@@ -512,7 +522,17 @@ export class BrokerService {
             });
           }
         }
+
+        if (gameState.roomCode) {
+          WebSocketService.emitAdminTelemetryUpdate(gameState.roomCode, {
+            actionType: 'auction-resolved',
+            source: 'broker',
+            sessionId,
+            auctionId: auction.auctionId,
+          });
+        }
       }
+
     }
 
     return team;

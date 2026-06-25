@@ -457,7 +457,7 @@ export class MatchmakingService {
       })),
     });
 
-    for (const gs of gameSessions) {
+        for (const gs of gameSessions) {
       WebSocketService.emitToGameRoom(gs.sessionId, 'game-started', {
         sessionId: gs.sessionId,
         gameSessionId: room.gameSessionId,
@@ -466,7 +466,14 @@ export class MatchmakingService {
       });
     }
 
+    WebSocketService.emitAdminTelemetryUpdate(room.roomCode, {
+      actionType: 'room-started',
+      source: 'matchmaking',
+      sessionId: room.gameSessionId || null,
+    });
+
     return {
+
       gameSessionId: room.gameSessionId || '',
       teams: gameSessions,
     };

@@ -59,6 +59,11 @@ const envSchema = z.object({
     .transform(value => value === 'true'),
   ADMIN_MONITOR_USERNAME: z.string().default(''),
   ADMIN_MONITOR_PASSWORD: z.string().default(''),
+  ADMIN_MONITOR_TELEMETRY_ENABLED: z
+    .string()
+    .default('true')
+    .transform(value => value === 'true'),
+  ADMIN_MONITOR_TELEMETRY_INTERVAL_MS: z.string().default('30000').transform(Number),
 
   // Chatbot / LLM configuration
   CHATBOT_ENABLED: z

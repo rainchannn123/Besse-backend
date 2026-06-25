@@ -6,6 +6,7 @@ import {
   loginAdmin,
   monitoringOverview,
   playerHistory,
+  roomLiveOverview,
 } from '../controllers/adminController';
 import { protectAdmin } from '../middleware/adminAuth';
 import { validate } from '../utils/validation';
@@ -32,6 +33,7 @@ const adminForceExitSchema = z.object({
 
 router.post('/auth/login', validate(adminLoginSchema), loginAdmin);
 router.get('/monitor/overview', protectAdmin, monitoringOverview);
+router.get('/monitor/rooms/:roomCode/live-overview', protectAdmin, roomLiveOverview);
 router.patch(
   '/players/:userId/force-exit',
   protectAdmin,

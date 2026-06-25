@@ -737,10 +737,10 @@ export class GameService {
     );
 
 
-    if (allCompleted) {
+        if (allCompleted) {
       gameState.gameStatus = 'completed';
       await this.updateGameState(sessionId, gameState);
-      
+
       const rankings = this.getTeamRankings(gameState);
       for (const team of gameState.teams) {
         WebSocketService.emitToGameRoom(team.sessionId, 'game-complete', {
@@ -748,7 +748,16 @@ export class GameService {
           sessionId: team.sessionId,
         });
       }
+
+      if (gameState.roomCode) {
+        WebSocketService.emitAdminTelemetryUpdate(gameState.roomCode, {
+          actionType: 'game-complete',
+          source: 'game-service',
+          sessionId,
+        });
+      }
     }
+
   }
 
   // ============================================
@@ -950,12 +959,21 @@ export class GameService {
     await this.updateTeamData(sessionId, refreshedTeam);
     await this.checkAllTeamsComplete(sessionId);
 
-    const updatedGameState = await this.getGameState(sessionId);
+        const updatedGameState = await this.getGameState(sessionId);
     if (updatedGameState) {
       WebSocketService.emitToGameRoom(sessionId, 'system-check-update', {
         gameState: updatedGameState,
       });
+
+      if (updatedGameState.roomCode) {
+        WebSocketService.emitAdminTelemetryUpdate(updatedGameState.roomCode, {
+          actionType: 'system-check-update',
+          source: 'system-check',
+          sessionId,
+        });
+      }
     }
+
   }
 
   // ============================================
