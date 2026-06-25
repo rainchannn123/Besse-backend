@@ -1,0 +1,163 @@
+[
+  {
+    "id": "doc-0",
+    "text": "# Clash of the Cities - Mission Net Zero\r\n## Player Game Guide, Rules, and Sustainability Knowledge\r\n\r\n## 1) Game Purpose\r\nClash of the Cities - Mission Net Zero is a real-time cooperative simulation where players run a city waste and recycling ecosystem.\r\n\r\nYour team objective is to keep the system healthy and sustainable by balancing:\r\n- **Budget ($)**\r\n- **City Health (%)**\r\n- **CO₂ Emissions (tCO₂e)**\r\n\r\nThe game teaches circular economy thinking: recover value from waste, reduce landfill dependence, and cut emissions while maintaining economic performance.\r\n\r\n---\r\n\r\n## 2) Team Roles and R",
+    "metadata": {
+      "chunk_index": 0
+    }
+  },
+  {
+    "id": "doc-1",
+    "text": "pendence, and cut emissions while maintaining economic performance.\r\n\r\n---\r\n\r\n## 2) Team Roles and Responsibilities\r\nEach game has 3 roles. Success depends on coordination.\r\n\r\n### 2.1 Municipality\r\nMain focus:\r\n- Collect waste efficiently\r\n- Manage city-level priorities\r\n- Support city projects and public outcomes\r\n\r\nTypical responsibilities:\r\n- Handle incoming waste flow and dispatch decisions\r\n- Prevent backlog and missed collection windows\r\n- Keep city health stable by reducing unmanaged waste and poor system conditions\r\n\r\n### 2.2 MRF (Materials Recovery Facility)\r\nMain focus:\r\n- Sort and p",
+    "metadata": {
+      "chunk_index": 1
+    }
+  },
+  {
+    "id": "doc-2",
+    "text": "e and poor system conditions\r\n\r\n### 2.2 MRF (Materials Recovery Facility)\r\nMain focus:\r\n- Sort and process waste into useful materials\r\n- Improve material quality and reduce contamination\r\n\r\nTypical responsibilities:\r\n- Process incoming batches quickly\r\n- Convert waste into tradable material inventory\r\n- Avoid long queue delays and process bottlenecks\r\n\r\n### 2.3 Broker\r\nMain focus:\r\n- Manage market activity and auction outcomes\r\n- Turn recovered materials into economic value\r\n\r\nTypical responsibilities:\r\n- List and trade materials strategically\r\n- Optimize timing and pricing decisions\r\n- Balan",
+    "metadata": {
+      "chunk_index": 2
+    }
+  },
+  {
+    "id": "doc-3",
+    "text": "ilities:\r\n- List and trade materials strategically\r\n- Optimize timing and pricing decisions\r\n- Balance revenue opportunities against inventory and timing risk\r\n\r\n---\r\n\r\n## 3) Core Game Flow (What Happens During a Match)\r\n\r\n## 3.1 Session Start\r\nWhen a game starts:\r\n- Team roles are assigned\r\n- Initial budget and city health are set\r\n- Initial waste appears\r\n- Real-time game clock begins\r\n\r\n## 3.2 Continuous Real-Time Loop\r\nDuring the session, the game repeatedly:\r\n1. Spawns/updates waste pressures\r\n2. Applies penalties/bonuses from current system state\r\n3.",
+    "metadata": {
+      "chunk_index": 3
+    }
+  },
+  {
+    "id": "doc-4",
+    "text": "es\r\n2. Applies penalties/bonuses from current system state\r\n3. Recalculates city health and related metrics\r\n4. Broadcasts state updates\r\n5. Checks countdown/game-over conditions\r\n\r\nThis means your actions have immediate and compounding effects.\r\n\r\n## 3.3 Typical Player Interaction Cycle\r\nA practical cycle looks like this:\r\n1. **Municipality** manages collection flow and system pressure\r\n2. **MRF** processes and grades materials\r\n3. **Broker** sells/trades outputs through market mechanisms\r\n4. Team reviews Budget + Health + CO₂ trend\r\n5.",
+    "metadata": {
+      "chunk_index": 4
+    }
+  },
+  {
+    "id": "doc-5",
+    "text": "eam reviews Budget + Health + CO₂ trend\r\n5. Team adapts strategy before the next wave/pressure\r\n\r\n---\r\n\r\n## 4) Core Systems Players Must Understand\r\n\r\n### 4.1 Waste Batches\r\nWaste arrives in batches with properties like:\r\n- Source/origin\r\n- Mass\r\n- Composition\r\n- Time/deadline pressure\r\n- Status (pending/processed/etc.)\r\n\r\nIf batches remain unmanaged too long, system penalties increase.\r\n\r\n### 4.2 Queues and Throughput\r\nBacklogs reduce performance.\r\n- Long pending queues create pressure on city outcomes\r\n- Delayed processing can hurt health and overall stability\r\n\r\n### 4.3 Material Recovery an",
+    "metadata": {
+      "chunk_index": 5
+    }
+  },
+  {
+    "id": "doc-6",
+    "text": "outcomes\r\n- Delayed processing can hurt health and overall stability\r\n\r\n### 4.3 Material Recovery and Quality\r\nHigher-quality recovered materials usually create:\r\n- Better sale opportunities\r\n- Better system efficiency\r\n- Better long-term team performance\r\n\r\nContamination and poor sorting reduce value and sustainability performance.\r\n\r\n### 4.4 Budget Dynamics\r\nBudget changes through:\r\n- Operating costs\r\n- Processing/handling outcomes\r\n- Material sales and market actions\r\n\r\nIf budget collapses, countdown-to-loss risk can start.\r\n\r\n### 4.5 City Health Dynamics\r\nCity health reflects overall envir",
+    "metadata": {
+      "chunk_index": 6
+    }
+  },
+  {
+    "id": "doc-7",
+    "text": "ountdown-to-loss risk can start.\r\n\r\n### 4.5 City Health Dynamics\r\nCity health reflects overall environmental and operational success.\r\nHealth typically worsens when:\r\n- Waste is unmanaged/overdue\r\n- System bottlenecks persist\r\n- Emissions and poor flow compound\r\n\r\nHealth can recover with strong operational control and coordinated actions.\r\n\r\n### 4.6 CO₂ Emissions\r\nCO₂ accumulates from operational activity, transport, and system inefficiency.\r\nLower CO₂ generally indicates better circular performance and more resilient strategy.\r\n\r\n---\r\n\r\n## 5) Win/Lose and Game-Over Logic (Player View)\r\n\r\n## 5",
+    "metadata": {
+      "chunk_index": 7
+    }
+  },
+  {
+    "id": "doc-8",
+    "text": "ance and more resilient strategy.\r\n\r\n---\r\n\r\n## 5) Win/Lose and Game-Over Logic (Player View)\r\n\r\n## 5.1 Immediate Risk Triggers\r\nLoss countdown risk starts when either condition is reached:\r\n- **City Health <= 0**\r\n- **Budget <= 0**\r\n\r\n## 5.2 Countdown Window\r\nWhen countdown starts, your team has a short rescue window.\r\n\r\nCurrent implemented countdown values:\r\n- Countdown duration: **30 seconds**\r\n- Recovery from health crisis requires: **Health > 5**\r\n- Recovery from budget crisis requires: **Budget > 1000**\r\n\r\nIf recovery does not happen before countdown expiry, that team is eliminated/lost.",
+    "metadata": {
+      "chunk_index": 8
+    }
+  },
+  {
+    "id": "doc-9",
+    "text": "dget > 1000**\r\n\r\nIf recovery does not happen before countdown expiry, that team is eliminated/lost.\r\n\r\n## 5.3 Time-End Condition\r\nA match also ends when full game time is reached.\r\nAt that point, pair/team final status is computed based on outcome logic.\r\n\r\n## 5.4 Practical Meaning for Players\r\nYou lose when you allow critical system collapse to persist.\r\nYou win by keeping your system viable while the opposing side fails first or by finishing with stronger final outcome.\r\n\r\n---\r\n\r\n## 6) Practical Strategy for Players\r\n\r\n### 6.1 Team Strategy Priorities\r\n1.",
+    "metadata": {
+      "chunk_index": 9
+    }
+  },
+  {
+    "id": "doc-10",
+    "text": "al Strategy for Players\r\n\r\n### 6.1 Team Strategy Priorities\r\n1. Prevent emergency thresholds (health/budget collapse)\r\n2. Keep waste moving (avoid backlog)\r\n3. Protect material quality\r\n4. Convert inventory into timely revenue\r\n5. Reduce unnecessary emissions\r\n\r\n### 6.2 Municipality Tips\r\n- Avoid over-accumulation of pending waste\r\n- Keep collection flow stable instead of reactive spikes\r\n- Coordinate with MRF before batches become critical\r\n\r\n### 6.3 MRF Tips\r\n- Prioritize high-impact queues to avoid penalty cascades\r\n- Preserve quality (contamination control)\r\n- Convert waste to usable mater",
+    "metadata": {
+      "chunk_index": 10
+    }
+  },
+  {
+    "id": "doc-11",
+    "text": "avoid penalty cascades\r\n- Preserve quality (contamination control)\r\n- Convert waste to usable material quickly and consistently\r\n\r\n### 6.4 Broker Tips\r\n- Do not sit on inventory too long in volatile moments\r\n- Use market timing to support team cash stability\r\n- Align selling decisions with team crisis state, not only peak price\r\n\r\n### 6.5 Crisis Playbook (When Countdown Starts)\r\nIf countdown reason is health:\r\n- Rapidly reduce waste pressure and stabilize processing flow\r\n- Improve system state until Health > 5\r\n\r\nIf countdown reason is budget:\r\n- Execute fast monetization decisions\r\n- Cut av",
+    "metadata": {
+      "chunk_index": 11
+    }
+  },
+  {
+    "id": "doc-12",
+    "text": "until Health > 5\r\n\r\nIf countdown reason is budget:\r\n- Execute fast monetization decisions\r\n- Cut avoidable losses and restore Budget > 1000\r\n\r\n---\r\n\r\n## 7) Circular Economy Knowledge (For In-Game Decision Making)\r\n\r\n## 7.1 Circular vs Linear Economy\r\n- **Linear model**: take -> make -> dispose\r\n- **Circular model**: recover -> reuse -> recycle -> regenerate\r\n\r\nThe game rewards circular behavior: keeping materials in productive loops and reducing waste leakage.\r\n\r\n## 7.2 Why Circular Operations Improve Game Outcomes\r\nCircular strategies typically:\r\n- Reduce landfill pressure\r\n- Preserve materi",
+    "metadata": {
+      "chunk_index": 12
+    }
+  },
+  {
+    "id": "doc-13",
+    "text": "Improve Game Outcomes\r\nCircular strategies typically:\r\n- Reduce landfill pressure\r\n- Preserve material value\r\n- Improve economic resilience\r\n- Lower emissions across the system\r\n\r\n## 7.3 Key Circular Principles\r\n1. **Waste is a resource** when properly sorted and recovered\r\n2. **Material quality matters** for reuse and resale value\r\n3. **System coordination matters** more than isolated optimization\r\n4.",
+    "metadata": {
+      "chunk_index": 13
+    }
+  },
+  {
+    "id": "doc-14",
+    "text": "tainability and Carbon Knowledge\r\n\r\n## 8.1 Why CO₂ Matters\r\nCO₂ is a performance signal for climate impact.\r\nIn this game, lower CO₂ usually means better system design and logistics efficiency.\r\n\r\n## 8.2 Major Emission Sources in Waste Systems\r\n- Transport of waste/materials\r\n- Processing energy use\r\n- Inefficient handling and repeated movement\r\n- Disposal pathways that miss recovery opportunities\r\n\r\n## 8.3 Lower-Carbon Operating Patterns\r\n- Shorter, cleaner material loops\r\n- Fewer avoidable transfers\r\n- Faster processing and less idle stock\r\n- Higher recovery rates and lower contamination",
+    "metadata": {
+      "chunk_index": 14
+    }
+  },
+  {
+    "id": "doc-15",
+    "text": "nsfers\r\n- Faster processing and less idle stock\r\n- Higher recovery rates and lower contamination\r\n\r\n## 8.4 Health, Economy, and Climate Are Linked\r\nA strong team does not optimize only one metric.\r\nBest outcomes usually come from balancing:\r\n- Financial viability (Budget)\r\n- Public/environmental performance (Health)\r\n- Emissions control (CO₂)\r\n\r\n---\r\n\r\n## 9) Player FAQ (RAG-Ready)\r\n\r\n### Q1: What should I do first when the game starts?\r\nCoordinate role priorities immediately: keep flow stable, process early batches fast, and avoid early budget/health shocks.\r\n\r\n### Q2: What causes sudden colla",
+    "metadata": {
+      "chunk_index": 15
+    }
+  },
+  {
+    "id": "doc-16",
+    "text": "rocess early batches fast, and avoid early budget/health shocks.\r\n\r\n### Q2: What causes sudden collapse?\r\nIgnoring backlog, delayed processing, or poor market timing until health or budget falls into emergency range.\r\n\r\n### Q3: What is the most important metric?\r\nNo single metric. You must jointly manage budget, health, and CO₂.\r\n\r\n### Q4: How do we recover during countdown?\r\nFor health countdown: push health above 5.\r\nFor budget countdown: push budget above 1000.\r\nDo it before 30 seconds expires.\r\n\r\n### Q5: Why does coordination matter so much?\r\nBecause each role controls different parts of o",
+    "metadata": {
+      "chunk_index": 16
+    }
+  },
+  {
+    "id": "doc-17",
+    "text": "s.\r\n\r\n### Q5: Why does coordination matter so much?\r\nBecause each role controls different parts of one shared system; local optimization can hurt team-level outcomes.\r\n\r\n### Q6: What is a circular economy in one sentence?\r\nIt is an economic approach that keeps materials in continuous use while minimizing waste and emissions.\r\n\r\n---\r\n\r\n## 10) Quick Reference Checklist\r\nBefore every major decision, ask:\r\n1. Does this protect health from critical thresholds?\r\n2. Does this protect budget from collapse?\r\n3. Does this reduce or at least not unnecessarily increase CO₂?\r\n4.",
+    "metadata": {
+      "chunk_index": 17
+    }
+  },
+  {
+    "id": "doc-18",
+    "text": "se?\r\n3. Does this reduce or at least not unnecessarily increase CO₂?\r\n4. Does this improve end-to-end flow across Municipality -> MRF -> Broker?\r\n5. Does this help the team avoid emergency countdown conditions?\r\n\r\nIf most answers are yes, it is usually a strong move.\r\n\r\n-- End of Document --",
+    "metadata": {
+      "chunk_index": 18
+    }
+  },
+  {
+    "id": "doc-19",
+    "text": "## 11) Metric Influencer Reference (Game Mechanics)\r\n\r\n### 11.1 City Health Influencers\r\nCity Health rises or falls from combined operational behavior.\r\n\r\nMajor negative influencers:\r\n- Unmanaged or overdue waste batches\r\n- Long pending queues and sustained bottlenecks\r\n- Failed or delayed processing throughput\r\n- High contamination and poor material handling quality\r\n- Compounded emissions and unstable system flow\r\n\r\nMajor positive influencers:\r\n- Fast, consistent collection and dispatch\r\n- Stable MRF throughput and queue reduction\r\n- Better sorting quality and lower contamination\r\n- Coordinated role actions that reduce pressure quickly\r\n\r\nPractical rule: Health drops when backlog and instability persist; Health recovers when flow is controlled and pressure is reduced quickly.",
+    "metadata": {
+      "chunk_index": 19
+    }
+  },
+  {
+    "id": "doc-20",
+    "text": "## 12) Wallet/Budget Influencers (Team Cash)\r\n\r\nBudget (wallet) is affected by both costs and value recovery.\r\n\r\nMajor negative influencers:\r\n- Operating/handling costs during waste collection and processing\r\n- Inefficiency penalties from delays and poor coordination\r\n- Holding inventory too long during weak market windows\r\n- Missed conversion opportunities from poor quality output\r\n\r\nMajor positive influencers:\r\n- Successful material sales and better pricing outcomes\r\n- High-quality recovered materials with stronger market value\r\n- Timely trading and inventory turnover by Broker\r\n- Municipality and MRF decisions that reduce avoidable losses\r\n\r\nPractical rule: Wallet grows from quality recovery plus timely market execution; wallet shrinks when costs and delays compound faster than revenue.",
+    "metadata": {
+      "chunk_index": 20
+    }
+  },
+  {
+    "id": "doc-21",
+    "text": "## 13) CO₂ Emission Influencers\r\n\r\nCO₂ in-game reflects climate impact from waste-system operations.\r\n\r\nMajor emission drivers:\r\n- Repeated transport and unnecessary movement of waste/materials\r\n- Energy-intensive or delayed processing paths\r\n- Idle stock, rework, and inefficient handling loops\r\n- Disposal-heavy patterns that miss recovery opportunities\r\n\r\nMajor CO₂ reduction drivers:\r\n- Short, efficient logistics loops\r\n- Faster processing and less queue idling\r\n- Higher recovery rates and lower contamination\r\n- Coordinated end-to-end flow from Municipality -> MRF -> Broker\r\n\r\nPractical rule: CO₂ increases with inefficient movement and delay; CO₂ decreases when teams keep materials in efficient circular loops.",
+    "metadata": {
+      "chunk_index": 21
+    }
+  },
+  {
+    "id": "doc-22",
+    "text": "## 14) Simple Equation-Style Mental Model\r\n\r\nThese are simplified mental models for player understanding (not exact engine code):\r\n\r\nHealth_next ≈ Health_now - BacklogPenalty - DelayPenalty - ContaminationPenalty - EmissionStress + RecoveryActions\r\n\r\nWallet_next ≈ Wallet_now + SalesRevenue + ProjectRewards - OperatingCosts - InefficiencyPenalties\r\n\r\nCO2_next ≈ CO2_now + TransportEmissions + ProcessingEmissions + InefficiencyEmissions - CircularEfficiencySavings\r\n\r\nWhere:\r\n- Backlog/Delay/Contamination terms grow when queues and poor handling persist\r\n- Revenue terms grow with high-quality output and good market timing\r\n- Emission terms grow with repeated movement and idle/rework loops\r\n\r\nUse this model to reason about trade-offs quickly during live play.",
+    "metadata": {
+      "chunk_index": 22
+    }
+  }
+]

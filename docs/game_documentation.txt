@@ -1,0 +1,275 @@
+# Clash of the Cities - Mission Net Zero
+## Player Game Guide, Rules, and Sustainability Knowledge
+
+## 1) Game Purpose
+Clash of the Cities - Mission Net Zero is a real-time cooperative simulation where players run a city waste and recycling ecosystem.
+
+Your team objective is to keep the system healthy and sustainable by balancing:
+- **Budget ($)**
+- **City Health (%)**
+- **CO₂ Emissions (tCO₂e)**
+
+The game teaches circular economy thinking: recover value from waste, reduce landfill dependence, and cut emissions while maintaining economic performance.
+
+---
+
+## 2) Team Roles and Responsibilities
+Each game has 3 roles. Success depends on coordination.
+
+### 2.1 Municipality
+Main focus:
+- Collect waste efficiently
+- Manage city-level priorities
+- Support city projects and public outcomes
+
+Typical responsibilities:
+- Handle incoming waste flow and dispatch decisions
+- Prevent backlog and missed collection windows
+- Keep city health stable by reducing unmanaged waste and poor system conditions
+
+### 2.2 MRF (Materials Recovery Facility)
+Main focus:
+- Sort and process waste into useful materials
+- Improve material quality and reduce contamination
+
+Typical responsibilities:
+- Process incoming batches quickly
+- Convert waste into tradable material inventory
+- Avoid long queue delays and process bottlenecks
+
+### 2.3 Broker
+Main focus:
+- Manage market activity and auction outcomes
+- Turn recovered materials into economic value
+
+Typical responsibilities:
+- List and trade materials strategically
+- Optimize timing and pricing decisions
+- Balance revenue opportunities against inventory and timing risk
+
+---
+
+## 3) Core Game Flow (What Happens During a Match)
+
+## 3.1 Session Start
+When a game starts:
+- Team roles are assigned
+- Initial budget and city health are set
+- Initial waste appears
+- Real-time game clock begins
+
+## 3.2 Continuous Real-Time Loop
+During the session, the game repeatedly:
+1. Spawns/updates waste pressures
+2. Applies penalties/bonuses from current system state
+3. Recalculates city health and related metrics
+4. Broadcasts state updates
+5. Checks countdown/game-over conditions
+
+This means your actions have immediate and compounding effects.
+
+## 3.3 Typical Player Interaction Cycle
+A practical cycle looks like this:
+1. **Municipality** manages collection flow and system pressure
+2. **MRF** processes and grades materials
+3. **Broker** sells/trades outputs through market mechanisms
+4. Team reviews Budget + Health + CO₂ trend
+5. Team adapts strategy before the next wave/pressure
+
+---
+
+## 4) Core Systems Players Must Understand
+
+### 4.1 Waste Batches
+Waste arrives in batches with properties like:
+- Source/origin
+- Mass
+- Composition
+- Time/deadline pressure
+- Status (pending/processed/etc.)
+
+If batches remain unmanaged too long, system penalties increase.
+
+### 4.2 Queues and Throughput
+Backlogs reduce performance.
+- Long pending queues create pressure on city outcomes
+- Delayed processing can hurt health and overall stability
+
+### 4.3 Material Recovery and Quality
+Higher-quality recovered materials usually create:
+- Better sale opportunities
+- Better system efficiency
+- Better long-term team performance
+
+Contamination and poor sorting reduce value and sustainability performance.
+
+### 4.4 Budget Dynamics
+Budget changes through:
+- Operating costs
+- Processing/handling outcomes
+- Material sales and market actions
+
+If budget collapses, countdown-to-loss risk can start.
+
+### 4.5 City Health Dynamics
+City health reflects overall environmental and operational success.
+Health typically worsens when:
+- Waste is unmanaged/overdue
+- System bottlenecks persist
+- Emissions and poor flow compound
+
+Health can recover with strong operational control and coordinated actions.
+
+### 4.6 CO₂ Emissions
+CO₂ accumulates from operational activity, transport, and system inefficiency.
+Lower CO₂ generally indicates better circular performance and more resilient strategy.
+
+---
+
+## 5) Win/Lose and Game-Over Logic (Player View)
+
+## 5.1 Immediate Risk Triggers
+Loss countdown risk starts when either condition is reached:
+- **City Health <= 0**
+- **Budget <= 0**
+
+## 5.2 Countdown Window
+When countdown starts, your team has a short rescue window.
+
+Current implemented countdown values:
+- Countdown duration: **30 seconds**
+- Recovery from health crisis requires: **Health > 5**
+- Recovery from budget crisis requires: **Budget > 1000**
+
+If recovery does not happen before countdown expiry, that team is eliminated/lost.
+
+## 5.3 Time-End Condition
+A match also ends when full game time is reached.
+At that point, pair/team final status is computed based on outcome logic.
+
+## 5.4 Practical Meaning for Players
+You lose when you allow critical system collapse to persist.
+You win by keeping your system viable while the opposing side fails first or by finishing with stronger final outcome.
+
+---
+
+## 6) Practical Strategy for Players
+
+### 6.1 Team Strategy Priorities
+1. Prevent emergency thresholds (health/budget collapse)
+2. Keep waste moving (avoid backlog)
+3. Protect material quality
+4. Convert inventory into timely revenue
+5. Reduce unnecessary emissions
+
+### 6.2 Municipality Tips
+- Avoid over-accumulation of pending waste
+- Keep collection flow stable instead of reactive spikes
+- Coordinate with MRF before batches become critical
+
+### 6.3 MRF Tips
+- Prioritize high-impact queues to avoid penalty cascades
+- Preserve quality (contamination control)
+- Convert waste to usable material quickly and consistently
+
+### 6.4 Broker Tips
+- Do not sit on inventory too long in volatile moments
+- Use market timing to support team cash stability
+- Align selling decisions with team crisis state, not only peak price
+
+### 6.5 Crisis Playbook (When Countdown Starts)
+If countdown reason is health:
+- Rapidly reduce waste pressure and stabilize processing flow
+- Improve system state until Health > 5
+
+If countdown reason is budget:
+- Execute fast monetization decisions
+- Cut avoidable losses and restore Budget > 1000
+
+---
+
+## 7) Circular Economy Knowledge (For In-Game Decision Making)
+
+## 7.1 Circular vs Linear Economy
+- **Linear model**: take -> make -> dispose
+- **Circular model**: recover -> reuse -> recycle -> regenerate
+
+The game rewards circular behavior: keeping materials in productive loops and reducing waste leakage.
+
+## 7.2 Why Circular Operations Improve Game Outcomes
+Circular strategies typically:
+- Reduce landfill pressure
+- Preserve material value
+- Improve economic resilience
+- Lower emissions across the system
+
+## 7.3 Key Circular Principles
+1. **Waste is a resource** when properly sorted and recovered
+2. **Material quality matters** for reuse and resale value
+3. **System coordination matters** more than isolated optimization
+4. **Prevention beats correction** (avoid backlogs before they become crises)
+
+---
+
+## 8) Sustainability and Carbon Knowledge
+
+## 8.1 Why CO₂ Matters
+CO₂ is a performance signal for climate impact.
+In this game, lower CO₂ usually means better system design and logistics efficiency.
+
+## 8.2 Major Emission Sources in Waste Systems
+- Transport of waste/materials
+- Processing energy use
+- Inefficient handling and repeated movement
+- Disposal pathways that miss recovery opportunities
+
+## 8.3 Lower-Carbon Operating Patterns
+- Shorter, cleaner material loops
+- Fewer avoidable transfers
+- Faster processing and less idle stock
+- Higher recovery rates and lower contamination
+
+## 8.4 Health, Economy, and Climate Are Linked
+A strong team does not optimize only one metric.
+Best outcomes usually come from balancing:
+- Financial viability (Budget)
+- Public/environmental performance (Health)
+- Emissions control (CO₂)
+
+---
+
+## 9) Player FAQ (RAG-Ready)
+
+### Q1: What should I do first when the game starts?
+Coordinate role priorities immediately: keep flow stable, process early batches fast, and avoid early budget/health shocks.
+
+### Q2: What causes sudden collapse?
+Ignoring backlog, delayed processing, or poor market timing until health or budget falls into emergency range.
+
+### Q3: What is the most important metric?
+No single metric. You must jointly manage budget, health, and CO₂.
+
+### Q4: How do we recover during countdown?
+For health countdown: push health above 5.
+For budget countdown: push budget above 1000.
+Do it before 30 seconds expires.
+
+### Q5: Why does coordination matter so much?
+Because each role controls different parts of one shared system; local optimization can hurt team-level outcomes.
+
+### Q6: What is a circular economy in one sentence?
+It is an economic approach that keeps materials in continuous use while minimizing waste and emissions.
+
+---
+
+## 10) Quick Reference Checklist
+Before every major decision, ask:
+1. Does this protect health from critical thresholds?
+2. Does this protect budget from collapse?
+3. Does this reduce or at least not unnecessarily increase CO₂?
+4. Does this improve end-to-end flow across Municipality -> MRF -> Broker?
+5. Does this help the team avoid emergency countdown conditions?
+
+If most answers are yes, it is usually a strong move.
+
+-- End of Document --
