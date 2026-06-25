@@ -5,6 +5,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import connectDB from './config/database';
 import { env } from './config/env';
 import { specs, swaggerUi } from './config/swagger';
+import { activityLogger } from './middleware/activityLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { errorLogger, requestLogger } from './middleware/logger';
 import { securityHeaders } from './middleware/security';
@@ -41,6 +42,12 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging
 app.use(requestLogger);
+
+// Activity logger - captures all mutating actions to ActivityLog collection
+app.use(activityLogger);
+
+// Activity logger - captures all mutating actions to ActivityLog collection
+app.use(activityLogger);
 
 // API Routes - ALL routes go here (after body parsing)
 app.use('/api/auth', authRoutes);

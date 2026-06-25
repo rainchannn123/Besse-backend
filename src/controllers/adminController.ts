@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
+import { ActivityCategory, ActivityStatus } from '../models/ActivityLog';
 import {
   adminLogin,
   forceExitPlayer,
   getAdminMonitoringOverview,
   getPlayerGameHistory,
 } from '../services/adminService';
+import { ActivityLogService } from '../services/activityLogService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendResponse } from '../utils/response';
 
@@ -62,5 +64,72 @@ export const getRoomTeams = asyncHandler(
       teams: [],
       message: 'Admin monitoring for all teams in room' 
     });
+  }
+);
+
+const VALID_CATEGORIES: ActivityCategory[] = [
+  'auth',
+  'lobby',
+  'matchmaking',
+  'game',
+  'municipality',
+  'mrf',
+  'broker',
+  'admin',
+  'system',
+];
+
+const VALID_STATUSES: ActivityStatus[] = ['success', 'failure'];
+
+// ✅ NEW: Get activity logs for admin
+export const getActivityLogs = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+
+    const categoryParam = (req.query.category as string) || '';
+    const statusParam = (req.query.status as string) || '';
+
+    const filters: any = {};
+
+    if (categoryParam && VALID_CATEGORIES.includes(categoryParam as ActivityCategory)) {
+      filters.category = categoryParam;
+    }
+
+    if (statusParam && VALID_STATUSES.includes(statusParam as ActivityStatus)) {
+      filters.status = statusParam;
+    }
+
+    if (req.query.action) filters.action = String(req.query.action);
+    if (req.query.userId) filters.userId = String(req.query.userId);
+    if (req.query.userEmail) filters.userEmail = String(req.query.userEmail);
+    if (req.query.sessionId) filters.sessionId = String(req.query.sessionId);
+    if (req.query.search) filters.search = String(req.query.search);
+
+    if (req.query.fromDate) {
+      const fromDate = new Date(String(req.query.fromDate));
+      if (!isNaN(fromDate.getTime())) {
+        filters.fromDate = fromDate;
+      }
+    }
+
+    if (req.query.toDate) {
+      const toDate = new Date(String(req.query.toDate));
+      if (!isNaN(toDate.getTime())) {
+        filters.toDate = toDate;
+      }
+    }
+
+    const data = await ActivityLogService.getLogs(filters, { page, limit });
+
+    sendResponse(res, 200, 'Activity logs retrieved', data);
+  }
+);
+
+// ✅ NEW: Get activity log statistics for admin
+export const getActivityLogStats = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const stats = await ActivityLogService.getStats();
+    sendResponse(res, 200, 'Activity log statistics retrieved', stats);
   }
 );
