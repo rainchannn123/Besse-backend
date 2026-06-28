@@ -108,24 +108,43 @@ export const adminLogin = async (username: string, password: string) => {
 };
 
 export const getAdminMonitoringOverview = async () => {
-  const [users, lobbies, gameSessions] = await Promise.all([
-    User.find({}, 'name email role accountType currentSession createdAt updatedAt')
-      .sort({ createdAt: -1 })
-      .lean<MonitorUserRecord[]>(),
-    Lobby.find({})
-      .select(
-        'sessionId lobbyCode leader gameMode stage status pairId partnerSessionId teamRole pairStatus players createdAt updatedAt'
-      )
-      .lean<any[]>(),
-    GameSession.find({})
-      .select('sessionId gameState players playerNames createdAt updatedAt')
-      .lean<any[]>(),
-  ]);
+  const users = await User.find(
+    {},
+    'name email role accountType currentSession createdAt updatedAt'
+  )
+    .sort({ createdAt: -1 })
+    .lean<MonitorUserRecord[]>();
+
+  const activeSessionIds = [
+    ...new Set(
+      users
+        .map(user => user.currentSession)
+        .filter(
+          (sessionId): sessionId is string =>
+            typeof sessionId === 'string' && sessionId.trim().length > 0
+        )
+    ),
+  ];
+
+  const [lobbies, gameSessions] =
+    activeSessionIds.length > 0
+      ? await Promise.all([
+          Lobby.find({ sessionId: { $in: activeSessionIds } })
+            .select(
+              'sessionId lobbyCode leader gameMode stage status pairId partnerSessionId teamRole pairStatus players createdAt updatedAt'
+            )
+            .lean<any[]>(),
+          GameSession.find({ sessionId: { $in: activeSessionIds } })
+            .select('sessionId gameState players playerNames createdAt updatedAt')
+            .lean<any[]>(),
+        ])
+      : [[], []];
 
   const lobbyBySession = new Map(lobbies.map(lobby => [lobby.sessionId, lobby]));
   const gameBySession = new Map(
     gameSessions.map(gameSession => [gameSession.sessionId, gameSession])
   );
+
 
   const usersById = new Map(users.map(user => [String(user._id), user]));
 
