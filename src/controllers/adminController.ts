@@ -7,8 +7,10 @@ import {
   getPlayerGameHistory,
   getRoomLiveOverview,
 } from '../services/adminService';
+
 import { ActivityLogService } from '../services/activityLogService';
 import { asyncHandler } from '../utils/asyncHandler';
+
 import { sendResponse } from '../utils/response';
 
 export const loginAdmin = asyncHandler(
@@ -29,9 +31,12 @@ export const monitoringOverview = asyncHandler(
   }
 );
 
+
+
 export const forceExit = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const { userId } = req.params;
+
     const { reason } = req.body || {};
 
     const data = await forceExitPlayer(userId, reason);

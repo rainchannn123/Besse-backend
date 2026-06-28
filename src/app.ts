@@ -132,13 +132,15 @@ const io = new SocketIOServer(server, {
 // Initialize WebSocket service
 WebSocketService.initialize(io);
 
+const MIN_ADMIN_MONITOR_TELEMETRY_INTERVAL_MS = 15_000;
+
 if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
   const telemetryIntervalMs = Math.max(
-    5_000,
-    Number(env.ADMIN_MONITOR_TELEMETRY_INTERVAL_MS) || 30_000
+    MIN_ADMIN_MONITOR_TELEMETRY_INTERVAL_MS,
+    Number(env.ADMIN_MONITOR_TELEMETRY_INTERVAL_MS) || MIN_ADMIN_MONITOR_TELEMETRY_INTERVAL_MS
   );
 
-  // Admin monitor telemetry snapshots (default every 30 seconds for started rooms)
+  // Admin monitor telemetry snapshots (minimum every 15 seconds for started rooms)
   AdminMonitorTelemetryService.startScheduledSnapshots(telemetryIntervalMs);
 }
 
@@ -236,12 +238,12 @@ server.listen(PORT, () => {
   if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
     logger.info(
       `Admin monitor telemetry snapshots scheduled every ${Math.max(
-        5_000,
-        Number(env.ADMIN_MONITOR_TELEMETRY_INTERVAL_MS) || 30_000
+        MIN_ADMIN_MONITOR_TELEMETRY_INTERVAL_MS,
+        Number(env.ADMIN_MONITOR_TELEMETRY_INTERVAL_MS) ||
+          MIN_ADMIN_MONITOR_TELEMETRY_INTERVAL_MS
       ) / 1000} seconds`
     );
   }
-
 });
 
 export default app;

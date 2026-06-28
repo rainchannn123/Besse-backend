@@ -1,275 +1,412 @@
 # Clash of the Cities - Mission Net Zero
-## Player Game Guide, Rules, and Sustainability Knowledge
+## Player Game Guide (Latest Public Version)
 
-## 1) Game Purpose
-Clash of the Cities - Mission Net Zero is a real-time cooperative simulation where players run a city waste and recycling ecosystem.
+This document is for players. It explains gameplay, team flow, and scoring logic only.
 
-Your team objective is to keep the system healthy and sustainable by balancing:
-- **Budget ($)**
+---
+
+## 1) Game Objective
+Your team must keep the city system stable and competitive by balancing:
+- **Wallet ($)**
 - **City Health (%)**
 - **CO₂ Emissions (tCO₂e)**
+- **Score**
 
-The game teaches circular economy thinking: recover value from waste, reduce landfill dependence, and cut emissions while maintaining economic performance.
-
----
-
-## 2) Team Roles and Responsibilities
-Each game has 3 roles. Success depends on coordination.
-
-### 2.1 Municipality
-Main focus:
-- Collect waste efficiently
-- Manage city-level priorities
-- Support city projects and public outcomes
-
-Typical responsibilities:
-- Handle incoming waste flow and dispatch decisions
-- Prevent backlog and missed collection windows
-- Keep city health stable by reducing unmanaged waste and poor system conditions
-
-### 2.2 MRF (Materials Recovery Facility)
-Main focus:
-- Sort and process waste into useful materials
-- Improve material quality and reduce contamination
-
-Typical responsibilities:
-- Process incoming batches quickly
-- Convert waste into tradable material inventory
-- Avoid long queue delays and process bottlenecks
-
-### 2.3 Broker
-Main focus:
-- Manage market activity and auction outcomes
-- Turn recovered materials into economic value
-
-Typical responsibilities:
-- List and trade materials strategically
-- Optimize timing and pricing decisions
-- Balance revenue opportunities against inventory and timing risk
+You win by making better circular-economy decisions than other teams in the same room.
 
 ---
 
-## 3) Core Game Flow (What Happens During a Match)
-
-## 3.1 Session Start
-When a game starts:
-- Team roles are assigned
-- Initial budget and city health are set
-- Initial waste appears
-- Real-time game clock begins
-
-## 3.2 Continuous Real-Time Loop
-During the session, the game repeatedly:
-1. Spawns/updates waste pressures
-2. Applies penalties/bonuses from current system state
-3. Recalculates city health and related metrics
-4. Broadcasts state updates
-5. Checks countdown/game-over conditions
-
-This means your actions have immediate and compounding effects.
-
-## 3.3 Typical Player Interaction Cycle
-A practical cycle looks like this:
-1. **Municipality** manages collection flow and system pressure
-2. **MRF** processes and grades materials
-3. **Broker** sells/trades outputs through market mechanisms
-4. Team reviews Budget + Health + CO₂ trend
-5. Team adapts strategy before the next wave/pressure
+## 2) Match Format and Team Capacity
+- A game room can host **n teams (up to 30 teams)** in the same match.
+- Each team has 3 roles:
+  1. Municipality
+  2. MRF (Materials Recovery Facility)
+  3. Broker
+- Teams compete in parallel under the same room timer and conditions.
 
 ---
 
-## 4) Core Systems Players Must Understand
+## 3) Role Responsibilities
 
-### 4.1 Waste Batches
-Waste arrives in batches with properties like:
-- Source/origin
-- Mass
-- Composition
-- Time/deadline pressure
-- Status (pending/processed/etc.)
+### 3.1 Municipality
+- Collect and route waste.
+- Start and complete city projects.
+- Coordinate with MRF for recovery and return logistics.
 
-If batches remain unmanaged too long, system penalties increase.
+### 3.2 MRF
+- Process waste into usable materials.
+- Maintain quality and reduce contamination.
+- Choose proper destination flow, including **go-to-landfill** when needed.
 
-### 4.2 Queues and Throughput
-Backlogs reduce performance.
-- Long pending queues create pressure on city outcomes
-- Delayed processing can hurt health and overall stability
-
-### 4.3 Material Recovery and Quality
-Higher-quality recovered materials usually create:
-- Better sale opportunities
-- Better system efficiency
-- Better long-term team performance
-
-Contamination and poor sorting reduce value and sustainability performance.
-
-### 4.4 Budget Dynamics
-Budget changes through:
-- Operating costs
-- Processing/handling outcomes
-- Material sales and market actions
-
-If budget collapses, countdown-to-loss risk can start.
-
-### 4.5 City Health Dynamics
-City health reflects overall environmental and operational success.
-Health typically worsens when:
-- Waste is unmanaged/overdue
-- System bottlenecks persist
-- Emissions and poor flow compound
-
-Health can recover with strong operational control and coordinated actions.
-
-### 4.6 CO₂ Emissions
-CO₂ accumulates from operational activity, transport, and system inefficiency.
-Lower CO₂ generally indicates better circular performance and more resilient strategy.
+### 3.3 Broker
+- Sell materials through available market channels.
+- Participate in auctions under fair-trade rules.
+- Convert inventory into wallet value efficiently.
 
 ---
 
-## 5) Win/Lose and Game-Over Logic (Player View)
-
-## 5.1 Immediate Risk Triggers
-Loss countdown risk starts when either condition is reached:
-- **City Health <= 0**
-- **Budget <= 0**
-
-## 5.2 Countdown Window
-When countdown starts, your team has a short rescue window.
-
-Current implemented countdown values:
-- Countdown duration: **30 seconds**
-- Recovery from health crisis requires: **Health > 5**
-- Recovery from budget crisis requires: **Budget > 1000**
-
-If recovery does not happen before countdown expiry, that team is eliminated/lost.
-
-## 5.3 Time-End Condition
-A match also ends when full game time is reached.
-At that point, pair/team final status is computed based on outcome logic.
-
-## 5.4 Practical Meaning for Players
-You lose when you allow critical system collapse to persist.
-You win by keeping your system viable while the opposing side fails first or by finishing with stronger final outcome.
+## 4) Core Flow for New Players
+1. Municipality collects and routes waste.
+2. Waste reaches MRF for sorting/processing.
+3. MRF can:
+   - Recover material for market use, or
+   - Send selected waste to **landfill** (usually lower-value, higher-impact fallback).
+4. Materials and requests move between **Municipality ↔ MRF** as needed.
+5. Broker lists/sells/auctions output.
+6. Team metrics (Wallet, Health, CO₂, Score) update continuously.
 
 ---
 
-## 6) Practical Strategy for Players
+## 5) New/Updated Gameplay Rules
 
-### 6.1 Team Strategy Priorities
-1. Prevent emergency thresholds (health/budget collapse)
-2. Keep waste moving (avoid backlog)
-3. Protect material quality
-4. Convert inventory into timely revenue
-5. Reduce unnecessary emissions
+### 5.1 MRF Landfill Option
+MRF now has a **go-to-landfill** action path.
+- Useful for handling specific waste situations.
+- Overuse can hurt sustainability performance.
 
-### 6.2 Municipality Tips
-- Avoid over-accumulation of pending waste
-- Keep collection flow stable instead of reactive spikes
-- Coordinate with MRF before batches become critical
+### 5.2 Revised Municipality Project Rewards
+Municipality project rewards were revised.
+- Completing projects now has updated reward impact.
+- Good project timing can stabilize both wallet and score.
 
-### 6.3 MRF Tips
-- Prioritize high-impact queues to avoid penalty cascades
-- Preserve quality (contamination control)
-- Convert waste to usable material quickly and consistently
+### 5.3 Two-Way Transportation (Municipality and MRF)
+Transportation now supports both directions:
+- **Municipality -> MRF**
+- **MRF -> Municipality**
 
-### 6.4 Broker Tips
-- Do not sit on inventory too long in volatile moments
-- Use market timing to support team cash stability
-- Align selling decisions with team crisis state, not only peak price
+This adds tactical logistics decisions (speed, queue pressure, and emissions impact).
 
-### 6.5 Crisis Playbook (When Countdown Starts)
-If countdown reason is health:
-- Rapidly reduce waste pressure and stabilize processing flow
-- Improve system state until Health > 5
+### 5.4 Auction Participation Restriction
+A team **cannot bid on its own listed auction**.
 
-If countdown reason is budget:
-- Execute fast monetization decisions
-- Cut avoidable losses and restore Budget > 1000
+### 5.5 Auction Settlement and Agent Fee
+When an auction is completed:
+- Winner pays the bid amount.
+- Seller receives payment.
+- **10% market agent fee** is deducted by the marketplace.
 
 ---
 
-## 7) Circular Economy Knowledge (For In-Game Decision Making)
+## 6) Metric Variation Logic (Player Formula View)
+These are player-facing equations for understanding direction of change.
 
-## 7.1 Circular vs Linear Economy
-- **Linear model**: take -> make -> dispose
-- **Circular model**: recover -> reuse -> recycle -> regenerate
+### 6.1 Wallet Variation
+Wallet_next ≈ Wallet_now + SalesIncome + ProjectRewards - OperatingCosts - LogisticsCosts - MarketFees
 
-The game rewards circular behavior: keeping materials in productive loops and reducing waste leakage.
+### 6.2 Health Variation
+Health_next ≈ Health_now - BacklogPenalty - DelayPenalty - PollutionPenalty + RecoveryActions + SuccessfulCityOps
 
-## 7.2 Why Circular Operations Improve Game Outcomes
-Circular strategies typically:
-- Reduce landfill pressure
-- Preserve material value
-- Improve economic resilience
-- Lower emissions across the system
+### 6.3 CO₂ Variation
+CO2_next ≈ CO2_now + TransportEmissions + ProcessingEmissions + LandfillImpact - EfficiencySavings
 
-## 7.3 Key Circular Principles
-1. **Waste is a resource** when properly sorted and recovered
-2. **Material quality matters** for reuse and resale value
-3. **System coordination matters** more than isolated optimization
-4. **Prevention beats correction** (avoid backlogs before they become crises)
+### 6.4 Score Variation
+Score_next ≈ Score_now + SustainabilityGains + EconomicPerformance + OperationalStability - CrisisPenalties
 
----
-
-## 8) Sustainability and Carbon Knowledge
-
-## 8.1 Why CO₂ Matters
-CO₂ is a performance signal for climate impact.
-In this game, lower CO₂ usually means better system design and logistics efficiency.
-
-## 8.2 Major Emission Sources in Waste Systems
-- Transport of waste/materials
-- Processing energy use
-- Inefficient handling and repeated movement
-- Disposal pathways that miss recovery opportunities
-
-## 8.3 Lower-Carbon Operating Patterns
-- Shorter, cleaner material loops
-- Fewer avoidable transfers
-- Faster processing and less idle stock
-- Higher recovery rates and lower contamination
-
-## 8.4 Health, Economy, and Climate Are Linked
-A strong team does not optimize only one metric.
-Best outcomes usually come from balancing:
-- Financial viability (Budget)
-- Public/environmental performance (Health)
-- Emissions control (CO₂)
+Interpretation:
+- Faster clean flow usually improves Health and Score.
+- Efficient transport and less landfill dependence usually improve CO₂ outcomes.
+- Better selling + lower avoidable costs improve Wallet.
 
 ---
 
-## 9) Player FAQ (RAG-Ready)
-
-### Q1: What should I do first when the game starts?
-Coordinate role priorities immediately: keep flow stable, process early batches fast, and avoid early budget/health shocks.
-
-### Q2: What causes sudden collapse?
-Ignoring backlog, delayed processing, or poor market timing until health or budget falls into emergency range.
-
-### Q3: What is the most important metric?
-No single metric. You must jointly manage budget, health, and CO₂.
-
-### Q4: How do we recover during countdown?
-For health countdown: push health above 5.
-For budget countdown: push budget above 1000.
-Do it before 30 seconds expires.
-
-### Q5: Why does coordination matter so much?
-Because each role controls different parts of one shared system; local optimization can hurt team-level outcomes.
-
-### Q6: What is a circular economy in one sentence?
-It is an economic approach that keeps materials in continuous use while minimizing waste and emissions.
+## 7) Win/Lose Basics
+- Teams must avoid collapse conditions (for example, severe Wallet/Health failure states).
+- Teams that stay stable longer and perform better across metrics rank higher.
+- Strong results come from balancing all four outcomes, not maximizing only one.
 
 ---
 
-## 10) Quick Reference Checklist
-Before every major decision, ask:
-1. Does this protect health from critical thresholds?
-2. Does this protect budget from collapse?
-3. Does this reduce or at least not unnecessarily increase CO₂?
-4. Does this improve end-to-end flow across Municipality -> MRF -> Broker?
-5. Does this help the team avoid emergency countdown conditions?
+## 8) Beginner Playbook
+- Keep waste moving; avoid queue build-up.
+- Use landfill sparingly and strategically.
+- Coordinate transport timing between Municipality and MRF.
+- Complete high-value projects at the right time.
+- In auctions, remember fee impact and never expect self-bidding.
+- Watch Wallet, Health, CO₂, and Score together before every big decision.
 
-If most answers are yes, it is usually a strong move.
+---
+
+## 9) Quick FAQ
+**Q: What changed most in this version?**
+A: Landfill path at MRF, revised municipality project rewards, two-way Municipality↔MRF transport, and updated auction/fairness settlement rules.
+
+**Q: Can one room have many teams now?**
+A: Yes. Up to 30 teams can compete in one room.
+
+**Q: Why did my auction profit feel lower than expected?**
+A: The market takes a 10% agent fee during auction settlement.
+
+**Q: Are these equations exact engine formulas?**
+A: They are player-facing directional models to help decision-making during play.
+
+---
+
+## 10) Final Note
+Gameplay balancing can continue over time. For best results, follow in-game tooltips and current room rules.
 
 -- End of Document --
+
+
+## 11) Advanced Learning Appendix: Circular Economy Concepts Mapped to Game Features
+
+### 11.1 Circular Economy in This Game
+This game models a circular system where materials should stay in use as long as possible.
+
+In practical gameplay terms:
+- **Better route**: Waste -> MRF processing -> reusable materials -> projects/market
+- **Fallback route**: Waste -> landfill
+
+Circular actions generally produce stronger long-term outcomes because they:
+- preserve material value,
+- reduce repeated extraction/purchase pressure,
+- reduce unmanaged waste pressure,
+- and usually keep both wallet and city systems more resilient.
+
+### 11.2 Waste Hierarchy (Applied)
+Use this decision order during play:
+1. **Prevent delays** (collect and process quickly)
+2. **Recover materials** (maximize useful output)
+3. **Reuse in city projects** (convert to city benefits)
+4. **Trade strategically** (auction / wholesaler decisions)
+5. **Landfill only when necessary** (last-resort pathway)
+
+### 11.3 Why Logistics Design Matters
+The game intentionally links logistics to sustainability:
+- More transport actions can improve flow speed, but also add cost and CO₂.
+- Slow/fast mode is a strategic trade-off (cheaper vs faster).
+- Bad timing can cause queue build-up, deadline penalties, and weak project completion tempo.
+
+### 11.4 Material Quality and Value Recovery
+MRF output and quality decisions affect market value and project readiness.
+This reflects real systems: contamination and low quality reduce downstream reuse value.
+
+### 11.5 Multi-Team Competition and Shared Learning
+With up to 30 teams in one room, players can learn from market behavior:
+- aggressive bidding can solve short-term shortages but hurt wallet,
+- excessive saving can miss critical project windows,
+- efficient teams usually synchronize Municipality + MRF + Broker decisions.
+
+---
+
+## 12) Detailed Public Mechanics (Current Implemented Values)
+
+### 12.1 Match and Timer Parameters
+- Team match duration: **15 minutes**
+- Waste spawn interval target: **every 0.5 minutes (~30s)**
+- Waste batch deadline before overdue penalty: **2 minutes**
+- Overdue batch penalty: **-7 Health per overdue batch**
+
+### 12.2 Starting Team State
+- Starting Wallet: **$20,000**
+- Starting City Health: **60**
+- Starting CO₂: **0**
+
+### 12.3 Transport (Municipality <-> MRF)
+Transport modes currently implemented:
+- **Fast:** $50 per ton, ~20 seconds
+- **Slow:** $25 per ton, ~40 seconds
+
+Transport emissions:
+- **+1.6 tCO₂ per transport trip**
+
+### 12.4 Landfill and Processing Values
+- Standard landfill factor: **2.5 tCO₂ per ton landfilled**
+- Dumping fee baseline: **$50 per ton**
+- MRF direct landfill option currently applies reduced factors:
+  - cost based on ~70% of estimated processing disposal cost
+  - landfill CO₂ at ~50% of standard landfill factor for this specific action
+
+### 12.5 Waste Spawn Mass and Origins
+Typical spawned batch mass:
+- **10.0 to 25.0 tons** (randomized)
+
+Origin compositions:
+- Residential: paper 50%, plastic 30%, glass 20%
+- Commercial: paper 40%, plastic 40%, metal 20%
+- Industrial: plastic 40%, metal 30%, wood 30%
+
+---
+
+## 13) Equation Library (Player-Facing, Implementation-Aligned)
+
+### 13.1 Core Transport and Emissions
+1. **Transport Cost**
+   - Fast mode: `Cost = BatchMass × 50`
+   - Slow mode: `Cost = BatchMass × 25`
+
+2. **Transport CO₂**
+   - `TransportCO2 = Trips × 1.6`
+
+3. **Landfill CO₂ (standard)**
+   - `LandfillCO2 = LandfilledMass × 2.5`
+
+### 13.2 MRF Processing Output
+For each material type in a batch:
+- `InputMass(material) = BatchMass × Composition(material)`
+- `OutputMass(material) = InputMass(material) × ProcessRate(material)`
+- `RefuseMass(material) = InputMass(material) × WasteRate(material)`
+
+Aggregated:
+- `TotalRefuse ≈ BatchMass - Sum(AllOutputMass)`
+- `DumpingFee = TotalRefuse × 50`
+- `ProcessingCO2 = BatchMass × 0.015`
+
+### 13.3 Material Price and Grade Logic
+- `MaterialValue = BasePrice × Mass × QualityMultiplier`
+
+Quality multipliers:
+- Material grades: A = 1.25, B = 1.00, C = 0.50
+- Waste grades (where applicable): B = 0.30, C = 0.20, F = 0.10
+
+### 13.4 Health Pressure Rules
+1. **Waste threshold penalty**
+   - If pending waste > 100 tons:
+   - `WastePenalty = (PendingWaste - 100) × 1%`
+
+2. **CO₂ threshold penalty**
+   - If total CO₂ > 200 tons:
+   - `CO2Penalty = floor((TotalCO2 - 200) / 50) × 1%`
+
+3. **Project bonus component in health model**
+   - `ProjectBonus = CompletedProjects × 5%` (system model component)
+
+### 13.5 Auction Rules and Settlement Equations
+- Auction duration: **30 seconds**
+- Bid increment rate: **5% of entry price** each bid
+  - `NextBid = CurrentBid + (EntryPrice × 0.05)`
+- Seller cannot self-bid on own auction.
+
+Settlement on winning bid:
+- Winner pays full bid amount.
+- Seller payout rate = 90%
+- Market fee = 10%
+
+Formulas:
+- `SellerPayout = FinalBid × 0.90`
+- `MarketFee = FinalBid × 0.10`
+- `WinnerWalletNext = WinnerWalletNow - FinalBid`
+- `SellerWalletNext = SellerWalletNow + SellerPayout`
+
+### 13.6 External Wholesaler Equation
+- `ExternalPurchaseCost = BasePrice × 2 × RequestedAmount`
+
+---
+
+## 14) Material Reference (Current Values)
+
+| Material | Base Price ($/ton) | Process Rate | Waste Rate | CO₂ Profile | CO₂ per ton used in project |
+|---|---:|---:|---:|---|---:|
+| Paper | 180 | 0.85 | 0.15 | Low | 0.8 |
+| Plastic | 350 | 0.80 | 0.20 | High | 2.5 |
+| Metal | 600 | 0.90 | 0.10 | Med | 1.5 |
+| Glass | 120 | 0.75 | 0.25 | Low | 0.6 |
+| Wood | 100 | 0.90 | 0.10 | Med | 0.3 |
+
+---
+
+## 15) Municipality Construction Projects (14 Projects, Detailed)
+
+Notes:
+- Project completion gives Health bonus, Wallet reward, and Score reward.
+- Score is currently derived from project difficulty/required material burden.
+
+### Project List
+1. **Neighborhood Pocket Park Upgrade** (p-1)
+   - Required: Wood 3, Paper 2
+   - Reward: +3 Health, +$700 Wallet, +8 Score
+
+2. **Eco Bus Stop Shelter Upgrade** (p-2)
+   - Required: Plastic 5, Metal 2, Wood 1
+   - Reward: +4 Health, +$820 Wallet, +12 Score
+
+3. **Community Compost Kiosk Network** (p-3)
+   - Required: Wood 6, Glass 3, Paper 4
+   - Reward: +6 Health, +$1,050 Wallet, +19 Score
+
+4. **School Recycling Corner Program** (p-4)
+   - Required: Paper 8, Plastic 6, Metal 3
+   - Reward: +6 Health, +$1,280 Wallet, +26 Score
+
+5. **Green Civic Plaza Development** (p-5)
+   - Required: Glass 14, Metal 7
+   - Reward: +9 Health, +$1,700 Wallet, +32 Score
+
+6. **Riverfront Cleanup & Sorting Pier** (p-6)
+   - Required: Wood 9, Metal 8, Plastic 5
+   - Reward: +9 Health, +$1,950 Wallet, +35 Score
+
+7. **Sustainable Transit Hub Retrofit** (p-7)
+   - Required: Metal 14, Plastic 9, Glass 6
+   - Reward: +11 Health, +$2,310 Wallet, +46 Score
+
+8. **Smart Waste Bin Network** (p-8)
+   - Required: Plastic 14, Metal 10, Glass 6, Paper 3
+   - Reward: +12 Health, +$2,750 Wallet, +53 Score
+
+9. **Solar-Powered Street Canopy System** (p-9)
+   - Required: Metal 16, Plastic 12, Wood 4
+   - Reward: +12 Health, +$3,900 Wallet, +51 Score
+
+10. **Urban Materials Innovation Center** (p-10)
+    - Required: Paper 10, Plastic 12, Glass 6, Metal 5, Wood 6
+    - Reward: +14 Health, +$4,230 Wallet, +59 Score
+
+11. **Resilient Eco-School Retrofit** (p-11)
+    - Required: Wood 15, Glass 8, Paper 9, Metal 5
+    - Reward: +18 Health, +$4,400 Wallet, +57 Score
+
+12. **Industrial Reuse & Recovery Depot** (p-12)
+    - Required: Metal 20, Wood 10, Plastic 9, Glass 6
+    - Reward: +20 Health, +$6,400 Wallet, +72 Score
+
+13. **Community Repair & Reuse Hub** (p-13)
+    - Required: Metal 12, Paper 10, Plastic 12, Wood 8, Glass 5
+    - Reward: +13 Health, +$6,850 Wallet, +73 Score
+
+14. **Eco Market & Circular Trade Hall** (p-14)
+    - Required: Glass 16, Wood 14, Paper 11, Plastic 10, Metal 18
+    - Reward: +18 Health, +$8,800 Wallet, +108 Score
+
+---
+
+## 16) Ranking and Competition Clarification (Current Behavior)
+
+For live multi-team competition:
+- Team ranking is computed by **total completed project score**.
+- Wallet, Health, and CO₂ remain critical for survival and action capacity.
+- A team with strong project completion usually ranks higher, but poor Wallet/Health control can still cause elimination risk.
+
+Practical interpretation for players:
+- Build score through project completion,
+- while maintaining operational stability to avoid being knocked out early.
+
+---
+
+## 17) Advanced Beginner Strategy (Learning-Oriented)
+
+### 17.1 First 3 Minutes
+- Prioritize stable waste intake and avoid missing early deadlines.
+- Start low/medium projects that match your likely material recovery flow.
+
+### 17.2 Mid-Game
+- Use MRF processing to feed both auction opportunities and municipality project needs.
+- Do not overuse landfill unless it prevents a bigger collapse.
+
+### 17.3 Auction Discipline
+- Remember every bid step is fixed from entry-price increments.
+- Include 10% marketplace fee effect when estimating seller return.
+
+### 17.4 CO₂-Aware Planning
+- Prefer fewer unnecessary movements.
+- Improve timing so material sits less in queues.
+- Use high-impact projects to offset pressure with stronger rewards.
+
+### 17.5 Circular Economy Learning Outcome
+A strong city team applies all three principles together:
+1. **Operational flow control** (avoid delay/backlog)
+2. **Resource recirculation** (recover and reuse)
+3. **System-level optimization** (wallet + health + emissions + score)
+
+-- Extended Player Learning Appendix End --
+
+

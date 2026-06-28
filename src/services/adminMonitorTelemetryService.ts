@@ -12,7 +12,7 @@ import { ValidationError } from '../utils/AppError';
 import { logger } from '../utils/logger';
 import { WebSocketService } from './websocketService';
 
-const DEFAULT_SNAPSHOT_INTERVAL_MS = 30_000;
+const DEFAULT_SNAPSHOT_INTERVAL_MS = 15_000;
 
 const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -298,12 +298,14 @@ export class AdminMonitorTelemetryService {
       return;
     }
 
+    const sanitizedIntervalMs = Math.max(DEFAULT_SNAPSHOT_INTERVAL_MS, intervalMs);
+
     this.telemetryInterval = setInterval(async () => {
       await this.captureStartedRoomsSnapshot();
-    }, Math.max(5_000, intervalMs));
+    }, sanitizedIntervalMs);
 
-    logger.info(`[AdminTelemetry] Snapshot scheduler started (interval=${intervalMs}ms)`);
-  }
+    logger.info(`[AdminTelemetry] Snapshot scheduler started (interval=${sanitizedIntervalMs}ms)`);
+    }
 
   static stopScheduledSnapshots(): void {
     if (!this.telemetryInterval) return;
@@ -326,7 +328,14 @@ export class AdminMonitorTelemetryService {
 
       for (const room of startedRooms) {
         try {
-          await this.captureSingleRoomSnapshot(room);
+          const snapshotResult = await this.captureSingleRoomSnapshot(room);
+
+          if (snapshotResult === 'completed') {
+            await MatchmakingRoom.updateOne(
+              { _id: room._id, status: 'started' },
+              { $set: { status: 'completed' } }
+            );
+          }
         } catch (error) {
           logger.error(`[AdminTelemetry] Failed snapshot for room ${room.roomCode}`, error);
         }
@@ -686,16 +695,38 @@ export class AdminMonitorTelemetryService {
     }
   }
 
-  private static async captureSingleRoomSnapshot(room: any): Promise<void> {
+  private static async captureSingleRoomSnapshot(
+    room: any
+  ): Promise<'captured' | 'completed' | 'skipped'> {
     const sessionIds = (room.teams || []).map((team: any) => team.sessionId).filter(Boolean);
-    if (sessionIds.length === 0) return;
+    if (sessionIds.length === 0) return 'completed';
 
     const gameSession = await GameSession.findOne({ sessionId: { $in: sessionIds } })
       .select('gameState')
       .lean<any>();
 
-    const teams: TeamData[] = gameSession?.gameState?.teams || [];
-    if (!teams.length) return;
+    const gameState = gameSession?.gameState;
+    const teams: TeamData[] = gameState?.teams || [];
+    if (!teams.length) return 'skipped';
+
+    const totalDurationSeconds = Math.max(
+      0,
+      Math.round(Number(gameState?.constants?.TEAM_GAME_DURATION_MINUTES || 15) * 60)
+    );
+    const gameStartTime = Number(gameState?.gameStartTime || 0);
+    const hasExpiredByTime =
+      Number.isFinite(gameStartTime) &&
+      gameStartTime > 0 &&
+      Date.now() >= gameStartTime + totalDurationSeconds * 1000;
+    const allTeamsFinished = teams.every(
+      (team) => team.gameStatus === 'completed' || team.gameStatus === 'eliminated'
+    );
+
+
+    
+    if (gameState?.gameStatus === 'completed' || allTeamsFinished || hasExpiredByTime) {
+      return 'completed';
+    }
 
     const rankedTeams = rankTeams(teams);
 
@@ -747,7 +778,7 @@ export class AdminMonitorTelemetryService {
       }
     );
 
-    const rankings = rankedTeams.map((entry, index) => ({
+        const rankings = rankedTeams.map((entry, index) => ({
       rank: index + 1,
       teamId: entry.team.teamId,
       sessionId: entry.team.sessionId,
@@ -771,5 +802,7 @@ export class AdminMonitorTelemetryService {
       teams: snapshotTeams,
       rankings,
     });
+
+    return 'captured';
   }
 }

@@ -334,7 +334,7 @@ export class GameService {
         requiredMaterials: { wood: 3, paper: 2 },
         progress: 0,
         completed: false,
-        healthBonus: 2,
+        healthBonus: 3,
         budgetBonus: 700,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -349,7 +349,7 @@ export class GameService {
         requiredMaterials: { plastic: 5, metal: 2, wood: 1 },
         progress: 0,
         completed: false,
-        healthBonus: 3,
+        healthBonus: 4,
         budgetBonus: 820,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -364,7 +364,7 @@ export class GameService {
         requiredMaterials: { wood: 6, glass: 3, paper: 4 },
         progress: 0,
         completed: false,
-        healthBonus: 4,
+        healthBonus: 6,
         budgetBonus: 1050,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -379,7 +379,7 @@ export class GameService {
         requiredMaterials: { paper: 8, plastic: 6, metal: 3 },
         progress: 0,
         completed: false,
-        healthBonus: 5,
+        healthBonus: 6,
         budgetBonus: 1280,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -391,10 +391,10 @@ export class GameService {
         id: 'p-5',
         name: 'Green Civic Plaza Development',
         description: 'Build a central eco-plaza with reclaimed materials and modular seating.',
-        requiredMaterials: { glass: 9, wood: 7, paper: 5, metal: 3 },
+        requiredMaterials: { glass: 14, metal: 7 },
         progress: 0,
         completed: false,
-        healthBonus: 7,
+        healthBonus: 9,
         budgetBonus: 1700,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -406,10 +406,10 @@ export class GameService {
         id: 'p-6',
         name: 'Riverfront Cleanup & Sorting Pier',
         description: 'Install interception docks and sort stations near waterways.',
-        requiredMaterials: { wood: 9, metal: 8, plastic: 5, glass: 4 },
+        requiredMaterials: { wood: 9, metal: 8, plastic: 5 },
         progress: 0,
         completed: false,
-        healthBonus: 8,
+        healthBonus: 9,
         budgetBonus: 1950,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -424,7 +424,7 @@ export class GameService {
         requiredMaterials: { metal: 14, plastic: 9, glass: 6 },
         progress: 0,
         completed: false,
-        healthBonus: 9,
+        healthBonus: 11,
         budgetBonus: 2310,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -439,7 +439,7 @@ export class GameService {
         requiredMaterials: { plastic: 14, metal: 10, glass: 6, paper: 3 },
         progress: 0,
         completed: false,
-        healthBonus: 10,
+        healthBonus: 12,
         budgetBonus: 2750,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -451,7 +451,7 @@ export class GameService {
         id: 'p-9',
         name: 'Solar-Powered Street Canopy System',
         description: 'Build solar-ready canopy lanes with reinforced recycled supports.',
-        requiredMaterials: { glass: 13, metal: 16, plastic: 6, wood: 4 },
+        requiredMaterials: { metal: 16, plastic: 12, wood: 4 },
         progress: 0,
         completed: false,
         healthBonus: 12,
@@ -466,7 +466,7 @@ export class GameService {
         id: 'p-10',
         name: 'Urban Materials Innovation Center',
         description: 'Open an urban lab for advanced reuse prototyping and pilot processing.',
-        requiredMaterials: { paper: 10, plastic: 12, glass: 10, metal: 14, wood: 6 },
+        requiredMaterials: { paper: 10, plastic: 12, glass: 6, metal: 5, wood: 6 },
         progress: 0,
         completed: false,
         healthBonus: 14,
@@ -484,7 +484,7 @@ export class GameService {
         requiredMaterials: { wood: 15, glass: 8, paper: 9, metal: 5 },
         progress: 0,
         completed: false,
-        healthBonus: 11,
+        healthBonus: 18,
         budgetBonus: 4400,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -499,7 +499,7 @@ export class GameService {
         requiredMaterials: { metal: 20, wood: 10, plastic: 9, glass: 6 },
         progress: 0,
         completed: false,
-        healthBonus: 16,
+        healthBonus: 20,
         budgetBonus: 6400,
         scoreBonus: 0,
         difficultyScore: 0,
@@ -737,9 +737,16 @@ export class GameService {
     );
 
 
-        if (allCompleted) {
+    if (allCompleted) {
       gameState.gameStatus = 'completed';
       await this.updateGameState(sessionId, gameState);
+
+      if (gameState.roomCode) {
+        await MatchmakingRoom.updateOne(
+          { roomCode: gameState.roomCode, status: 'started' },
+          { $set: { status: 'completed' } }
+        );
+      }
 
       const rankings = this.getTeamRankings(gameState);
       for (const team of gameState.teams) {
@@ -757,6 +764,7 @@ export class GameService {
         });
       }
     }
+
 
   }
 
