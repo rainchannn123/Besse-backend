@@ -10,6 +10,7 @@ import {
 } from '../controllers/mrfController';
 
 import { protect } from '../middleware/auth';
+import { idempotency } from '../middleware/idempotency';
 import { validate } from '../utils/validation';
 import { z } from 'zod';
 
@@ -54,8 +55,24 @@ const sendBackToMunicipalitySchema = z.object({
  *     security:
  *       - bearerAuth: []
  */
-router.post('/process-waste', validate(processWasteSchema), processWaste);
-router.post('/to-landfill', validate(processWasteSchema), sendToLandfill);
+router.post(
+  '/process-waste',
+  validate(processWasteSchema),
+  idempotency({
+    scope: 'mrf.process-waste',
+    resolveScope: (req) => String(req.body?.sessionId || ''),
+  }),
+  processWaste
+);
+router.post(
+  '/to-landfill',
+  validate(processWasteSchema),
+  idempotency({
+    scope: 'mrf.to-landfill',
+    resolveScope: (req) => String(req.body?.sessionId || ''),
+  }),
+  sendToLandfill
+);
 
 
 /**

@@ -250,6 +250,7 @@ export interface TeamData {
 // ============================================
 
 export interface GameState {
+  stateVersion?: number;
   sessionId: string;
   roomCode?: string;
   roomTeams?: Array<{

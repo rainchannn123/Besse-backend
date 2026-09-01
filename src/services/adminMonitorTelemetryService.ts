@@ -10,6 +10,7 @@ import {
 import { TeamData } from '../types';
 import { ValidationError } from '../utils/AppError';
 import { logger } from '../utils/logger';
+import { SchedulerLeaseService } from './schedulerLeaseService';
 import { WebSocketService } from './websocketService';
 
 const DEFAULT_SNAPSHOT_INTERVAL_MS = 15_000;
@@ -301,7 +302,13 @@ export class AdminMonitorTelemetryService {
     const sanitizedIntervalMs = Math.max(DEFAULT_SNAPSHOT_INTERVAL_MS, intervalMs);
 
     this.telemetryInterval = setInterval(async () => {
-      await this.captureStartedRoomsSnapshot();
+      await SchedulerLeaseService.runSingletonJob(
+        'scheduler.admin-telemetry-snapshot',
+        Math.max(5_000, Math.floor(sanitizedIntervalMs * 0.9)),
+        async () => {
+          await this.captureStartedRoomsSnapshot();
+        }
+      );
     }, sanitizedIntervalMs);
 
     logger.info(`[AdminTelemetry] Snapshot scheduler started (interval=${sanitizedIntervalMs}ms)`);

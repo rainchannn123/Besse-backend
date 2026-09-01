@@ -14,7 +14,6 @@ type AuctionResolutionResult = {
 };
 
 export class BrokerService {
-  private static auctionTimers: Map<string, NodeJS.Timeout> = new Map();
   private static readonly SELLER_PAYOUT_RATE = 0.9;
 
 
@@ -23,80 +22,12 @@ export class BrokerService {
   // ============================================
 
   static scheduleAuctionResolution(
-    sessionId: string,
-    auctionId: string,
-    delayMs: number
+    _sessionId: string,
+    _auctionId: string,
+    _delayMs: number
   ): void {
-    const existing = this.auctionTimers.get(auctionId);
-    if (existing) clearTimeout(existing);
-
-    const timer = setTimeout(async () => {
-      this.auctionTimers.delete(auctionId);
-      try {
-        const gameState = await GameService.getGameState(sessionId);
-        if (!gameState || gameState.gameStatus !== 'active') return;
-
-        // Find the auction in the team's marketplace
-        const team = gameState.teams.find(t => t.sessionId === sessionId);
-        if (!team) return;
-
-        const auction = team.marketplaceListing.find(
-          a => a.auctionId === auctionId && a.status === 'active'
-        );
-        if (!auction) return;
-
-                const resolution = await this.resolveAuction(gameState, team, auction, sessionId);
-
-        await GameService.updateTeamData(sessionId, team);
-
-        await GameService.updateGameState(sessionId, gameState);
-
-                const actionDetails = {
-          auctionId,
-          materialType: auction.materialType,
-          mass: auction.mass,
-          winner: auction.highBidder,
-          winnerSessionId: resolution.winnerSessionId,
-          finalPrice: resolution.finalPrice,
-          finalStatus: resolution.finalStatus,
-          sellerPayout: resolution.sellerPayout,
-          serviceFee: resolution.serviceFee,
-          returnedToMRF: resolution.returnedToMRF,
-        };
-
-
-        // Broadcast to all teams in the room
-        this.broadcastToRoom(gameState, 'auction-resolved', actionDetails);
-
-                // Also push authoritative game-state updates to each team session
-        for (const roomTeam of gameState.teams) {
-          const teamGameState = await GameService.getGameState(roomTeam.sessionId);
-          if (teamGameState) {
-            WebSocketService.emitToGameRoom(roomTeam.sessionId, 'game-state-updated', {
-              gameState: teamGameState,
-              actionType: 'auction-resolved',
-              actionDetails,
-            });
-          }
-        }
-
-        if (gameState.roomCode) {
-          WebSocketService.emitAdminTelemetryUpdate(gameState.roomCode, {
-            actionType: 'auction-resolved',
-            source: 'broker',
-            sessionId,
-            auctionId,
-          });
-        }
-
-        logger.info(`[BrokerService] Auction ${auctionId} resolved immediately`);
-
-      } catch (err) {
-        logger.error(`[BrokerService] Failed to resolve auction ${auctionId}:`, err);
-      }
-    }, delayMs);
-
-    this.auctionTimers.set(auctionId, timer);
+    // Deprecated: in-memory timers are intentionally removed for multi-instance safety.
+    // Auction expiry is handled by the singleton scheduler via resolveExpiredAuctions().
   }
 
   // ============================================
@@ -115,9 +46,7 @@ export class BrokerService {
     }
 
     for (const team of gameState.teams) {
-      const auctions = team.marketplaceListing.filter(
-        auction => auction.status === 'active' || auction.status === 'sold'
-      );
+      const auctions = team.marketplaceListing;
 
       for (const auction of auctions) {
         const highBidderTeamRole = auction.highBidderSessionId
@@ -140,9 +69,13 @@ export class BrokerService {
     }
 
     return allAuctions.sort((a, b) => {
-      if (a.status === 'active' && b.status !== 'active') return -1;
-      if (a.status !== 'active' && b.status === 'active') return 1;
-      return a.endTime - b.endTime;
+      const aEndTime = Number(a.endTime || 0);
+      const bEndTime = Number(b.endTime || 0);
+      if (aEndTime !== bEndTime) {
+        return bEndTime - aEndTime;
+      }
+
+      return String(b.auctionId).localeCompare(String(a.auctionId));
     });
   }
 
@@ -155,14 +88,14 @@ export class BrokerService {
     auctionId: string,
     playerId: string
   ): Promise<TeamData> {
-    const team = await GameService.getTeamData(sessionId);
+    const gameState = await GameService.getGameState(sessionId);
+    if (!gameState) throw new Error('Game state not found');
+
+    const team = gameState.teams.find((t) => t.sessionId === sessionId);
     if (!team) throw new Error('Team not found');
     if (team.isEliminated || team.gameStatus !== 'active') {
       throw new Error('Team is eliminated or game is over');
     }
-
-    const gameState = await GameService.getGameState(sessionId);
-    if (!gameState) throw new Error('Game state not found');
 
     const now = Date.now();
 
@@ -214,12 +147,18 @@ export class BrokerService {
     auction.highBidder = playerId;
     auction.highBidderSessionId = sessionId;
 
-    // Decrement previous bidder's active bids
+    // Decrement previous bidder's active bids (in-memory; persisted once below)
     if (previousHighBidder && previousHighBidder !== playerId && previousHighBidderSessionId) {
-      const prevTeam = gameState.teams.find(t => t.sessionId === previousHighBidderSessionId);
-      if (prevTeam && prevTeam.activeBids) {
-        prevTeam.activeBids[previousHighBidder] = (prevTeam.activeBids[previousHighBidder] || 1) - 1;
-        await GameService.updateTeamData(previousHighBidderSessionId, prevTeam);
+      const prevTeam = gameState.teams.find((t) => t.sessionId === previousHighBidderSessionId);
+      if (prevTeam) {
+        if (!prevTeam.activeBids) {
+          prevTeam.activeBids = {};
+        }
+
+        prevTeam.activeBids[previousHighBidder] = Math.max(
+          0,
+          (prevTeam.activeBids[previousHighBidder] || 1) - 1
+        );
       }
     }
 
@@ -236,9 +175,7 @@ export class BrokerService {
       auctionTeam.marketplaceListing[auctionIdx] = auction;
     }
 
-    // Save both teams
-    await GameService.updateTeamData(sessionId, team);
-    await GameService.updateTeamData(auctionTeamSessionId, auctionTeam);
+    // Persist room state once to reduce write amplification/latency for rapid bids
     await GameService.updateGameState(sessionId, gameState);
 
         // ✅ Broadcast to ALL teams in the room

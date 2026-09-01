@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { env } from '../config/env';
 import { WebSocketService } from './websocketService';
 import GameSession from '../models/GameSession';
+import PlayerGameResult from '../models/PlayerGameResult';
 import Lobby from '../models/Lobby';
 import User from '../models/User';
 import { ValidationError } from '../utils/AppError';
@@ -360,70 +361,33 @@ export const getPlayerGameHistory = async (
     throw new ValidationError('Invalid user id');
   }
 
-  const objectId = new mongoose.Types.ObjectId(userId);
-
-  const orFilter = [
-    { 'players.municipality': objectId },
-    { 'players.mrf': objectId },
-    { 'players.broker': objectId },
-  ];
-
   const [records, total] = await Promise.all([
-    GameSession.find({ $or: orFilter })
-      .select('sessionId players playerNames gameState createdAt updatedAt')
-      .sort({ createdAt: -1 })
+    PlayerGameResult.find({ userId })
+      .select(
+        'roomCode teamSessionId roleInGame rank city teamName score budget health status recordedAt createdAt updatedAt'
+      )
+      .sort({ recordedAt: -1, rank: 1 })
       .skip(skip)
       .limit(limit)
       .lean<any[]>(),
-    GameSession.countDocuments({ $or: orFilter }),
+    PlayerGameResult.countDocuments({ userId }),
   ]);
 
-  const partnerSessionIds = records
-    .map(s => s.gameState?.partnerSessionId)
-    .filter(Boolean) as string[];
-
-  const partnerSessions =
-    partnerSessionIds.length > 0
-      ? await GameSession.find({ sessionId: { $in: partnerSessionIds } })
-          .select('sessionId playerNames')
-          .lean<any[]>()
-      : [];
-
-  const partnerBySessionId = new Map(
-    partnerSessions.map(ps => [ps.sessionId, ps])
-  );
-
-  const history = records.map(session => {
-    let roleInGame: 'municipality' | 'mrf' | 'broker' | null = null;
-    if (String(session.players.municipality) === userId) roleInGame = 'municipality';
-    else if (String(session.players.mrf) === userId) roleInGame = 'mrf';
-    else if (String(session.players.broker) === userId) roleInGame = 'broker';
-
-    const partnerSessionId = session.gameState?.partnerSessionId || null;
-    const partnerSession = partnerSessionId ? partnerBySessionId.get(partnerSessionId) : null;
-    const competitorNames: string[] = partnerSession?.playerNames
-      ? [
-          partnerSession.playerNames.municipality,
-          partnerSession.playerNames.mrf,
-          partnerSession.playerNames.broker,
-        ].filter(Boolean)
-      : [];
-
-    return {
-      sessionId: session.sessionId,
-      roleInGame,
-      playerNames: session.playerNames,
-      competitorNames,
-      gameStatus: session.gameState?.gameStatus || null,
-      cityHealth: session.gameState?.cityHealth ?? null,
-      budget: session.gameState?.budget ?? null,
-      totalCO2: session.gameState?.totalCO2 ?? null,
-      currentGameDay: session.gameState?.currentGameDay ?? null,
-      minutesElapsed: session.gameState?.minutesElapsed ?? null,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-    };
-  });
+  const history = records.map((record) => ({
+    roomCode: record.roomCode,
+    teamSessionId: record.teamSessionId,
+    roleInGame: record.roleInGame,
+    rank: record.rank,
+    city: record.city,
+    teamName: record.teamName,
+    score: record.score,
+    budget: record.budget,
+    health: record.health,
+    status: record.status,
+    recordedAt: record.recordedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }));
 
   return { userId, total, limit, skip, history };
 };

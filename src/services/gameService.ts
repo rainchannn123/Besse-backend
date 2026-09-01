@@ -4,8 +4,8 @@ import { DEFAULT_GAME_CONSTANTS } from '../constants/constants';
 import GameSession, { IGameSession } from '../models/GameSession';
 import Lobby from '../models/Lobby';
 import PairScore from '../models/PairScore';
+import PlayerGameResult from '../models/PlayerGameResult';
 import MatchmakingRoom from '../models/MatchmakingRoom';
-import User from '../models/User';
 import { 
   CityProject, 
   GameConstants, 
@@ -54,6 +54,41 @@ export class GameService {
     return team;
   }
 
+  private static buildSessionPersistencePayload(
+    team: TeamData,
+    gameState: GameState
+  ): {
+    gameState: GameState;
+    players: { municipality: string; mrf: string; broker: string };
+    playerNames: { municipality: string; mrf: string; broker: string };
+  } {
+    return {
+      gameState,
+      players: {
+        municipality: team.players.municipality,
+        mrf: team.players.mrf,
+        broker: team.players.broker,
+      },
+      playerNames: {
+        municipality: team.playerNames.municipality,
+        mrf: team.playerNames.mrf,
+        broker: team.playerNames.broker,
+      },
+    };
+  }
+
+  private static getNormalizedStateVersion(gameState: GameState): number {
+    const parsed = Number(gameState?.stateVersion ?? 0);
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0;
+  }
+
+  private static withStateVersion(gameState: GameState, stateVersion: number): GameState {
+    return {
+      ...gameState,
+      stateVersion,
+    };
+  }
+
 
   // ============================================
   // MULTI-TEAM GAME CREATION
@@ -91,17 +126,22 @@ export class GameService {
         throw new Error('Missing role assignments');
       }
 
-      const user = await User.findOne({ currentSession: sessionId });
-      if (!user) {
-        throw new Error('User not found');
-      }
-
       const matchmakingRoom = await MatchmakingRoom.findOne({
         'teams.sessionId': sessionId,
       });
 
       if (!matchmakingRoom) {
         throw new Error('Team not in a matchmaking room');
+      }
+
+      const existingRoomGame = await GameSession.findOne({
+        'gameState.roomCode': matchmakingRoom.roomCode,
+      });
+      if (existingRoomGame) {
+        logger.warn(
+          `[GameService] Game already exists for room ${matchmakingRoom.roomCode}, returning existing`
+        );
+        return existingRoomGame.gameState;
       }
 
       const teamData = matchmakingRoom.teams.find(t => t.sessionId === sessionId);
@@ -274,6 +314,7 @@ export class GameService {
       await lobby.save();
 
       const gameState: GameState = {
+        stateVersion: 0,
         sessionId: sessionId,
         roomCode: matchmakingRoom.roomCode,
         roomTeams: matchmakingRoom.teams.map(t => ({
@@ -288,20 +329,17 @@ export class GameService {
         gameStatus: 'active',
       };
 
-      await GameSession.create({
-        sessionId: sessionId,
-        gameState,
-        players: {
-          municipality: municipalityPlayer.userId,
-          mrf: mrfPlayer.userId,
-          broker: brokerPlayer.userId,
-        },
-        playerNames: {
-          municipality: municipalityPlayer.name,
-          mrf: mrfPlayer.name,
-          broker: brokerPlayer.name,
-        },
-      });
+      await Promise.all(
+        allTeams.map((teamRecord) =>
+          GameSession.updateOne(
+            { sessionId: teamRecord.sessionId },
+            {
+              $set: this.buildSessionPersistencePayload(teamRecord, gameState),
+            },
+            { upsert: true }
+          )
+        )
+      );
 
       // ✅ Broadcast to all teams in the room
       for (const t of matchmakingRoom.teams) {
@@ -666,7 +704,21 @@ export class GameService {
 
   static async getGameState(sessionId: string): Promise<GameState | null> {
     const session = await GameSession.findOne({ sessionId });
-    return session?.gameState || null;
+    if (session?.gameState) {
+      const stateVersion = this.getNormalizedStateVersion(session.gameState);
+      return this.withStateVersion(session.gameState, stateVersion);
+    }
+
+    const roomSession = await GameSession.findOne({
+      'gameState.roomTeams.sessionId': sessionId,
+    });
+
+    if (!roomSession?.gameState) {
+      return null;
+    }
+
+    const stateVersion = this.getNormalizedStateVersion(roomSession.gameState);
+    return this.withStateVersion(roomSession.gameState, stateVersion);
   }
 
   static async getAllTeamsInRoom(roomCode: string): Promise<TeamData[]> {
@@ -687,7 +739,9 @@ export class GameService {
   }
 
 
-    static async updateGameState(sessionId: string, gameState: GameState): Promise<void> {
+  static async updateGameState(sessionId: string, gameState: GameState): Promise<void> {
+    const expectedVersion = this.getNormalizedStateVersion(gameState);
+    const nextState = this.withStateVersion(gameState, expectedVersion + 1);
     const relatedSessionIds = new Set<string>([sessionId]);
 
     // In matchmaking/multi-team mode, each team has its own GameSession document.
@@ -698,10 +752,25 @@ export class GameService {
       }
     }
 
-    await GameSession.updateMany(
-      { sessionId: { $in: Array.from(relatedSessionIds) } },
-      { gameState }
+    const teamsBySession = new Map<string, TeamData>(
+      (nextState.teams || []).map((team) => [team.sessionId, team])
     );
+
+    for (const targetSessionId of relatedSessionIds) {
+      const team = teamsBySession.get(targetSessionId);
+
+      if (!team) {
+        continue;
+      }
+
+      const payload = this.buildSessionPersistencePayload(team, nextState);
+
+      await GameSession.updateOne(
+        { sessionId: targetSessionId },
+        { $set: payload },
+        { upsert: true }
+      );
+    }
   }
 
   // ============================================
@@ -726,9 +795,13 @@ export class GameService {
 
   }
 
-    static async checkAllTeamsComplete(sessionId: string): Promise<void> {
+  static async checkAllTeamsComplete(sessionId: string): Promise<void> {
     const gameState = await this.getGameState(sessionId);
     if (!gameState) return;
+
+    if (gameState.gameStatus === 'completed') {
+      return;
+    }
 
     gameState.teams = gameState.teams.map((team) => this.normalizeTeamScoreFields(team));
 
@@ -736,10 +809,42 @@ export class GameService {
       t.gameStatus === 'completed' || t.isEliminated
     );
 
+    const activeTeams = gameState.teams.filter(
+      (team) => !team.isEliminated && team.gameStatus === 'active'
+    );
+    const hasEliminatedTeams = gameState.teams.some((team) => team.isEliminated);
+    const lastTeamStanding = activeTeams.length === 1 && hasEliminatedTeams;
 
-    if (allCompleted) {
+
+    if (allCompleted || lastTeamStanding) {
+      if (lastTeamStanding) {
+        const winnerTeamId = activeTeams[0].teamId;
+        gameState.teams = gameState.teams.map((team) => {
+          if (team.teamId === winnerTeamId) {
+            return {
+              ...team,
+              gameStatus: 'completed',
+              totalProjectScore:
+                team.totalProjectScore ?? this.calculateCompletedProjectScore(team.cityProjects),
+            };
+          }
+
+          if (!team.isEliminated && team.gameStatus === 'active') {
+            return {
+              ...team,
+              gameStatus: 'completed',
+              totalProjectScore:
+                team.totalProjectScore ?? this.calculateCompletedProjectScore(team.cityProjects),
+            };
+          }
+
+          return team;
+        });
+      }
+
       gameState.gameStatus = 'completed';
       await this.updateGameState(sessionId, gameState);
+      await this.persistRoomGameResults(gameState);
 
       if (gameState.roomCode) {
         await MatchmakingRoom.updateOne(
@@ -750,6 +855,11 @@ export class GameService {
 
       const rankings = this.getTeamRankings(gameState);
       for (const team of gameState.teams) {
+        WebSocketService.broadcastGameStateUpdate(team.sessionId, gameState, 'game-complete', {
+          winnerTeamId: activeTeams[0]?.teamId || null,
+          immediateEnd: lastTeamStanding,
+        });
+
         WebSocketService.emitToGameRoom(team.sessionId, 'game-complete', {
           rankings: rankings,
           sessionId: team.sessionId,
@@ -834,6 +944,96 @@ export class GameService {
     }));
 
     return rankings.sort((a, b) => b.totalScore - a.totalScore);
+  }
+
+  private static async persistRoomGameResults(gameState: GameState): Promise<void> {
+    const roomCode = String(gameState.roomCode || '').trim();
+    if (!roomCode || !Array.isArray(gameState.teams) || gameState.teams.length === 0) {
+      return;
+    }
+
+    const rankedTeams = this.getTeamRankings(gameState).map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+    const rankingByTeamId = new Map(rankedTeams.map((entry) => [entry.teamId, entry]));
+
+    const sessionIds = gameState.teams.map((team) => team.sessionId);
+    const sessionDocs = await GameSession.find(
+      { sessionId: { $in: sessionIds } },
+      { sessionId: 1, playerNames: 1 }
+    ).lean<any[]>();
+    const sessionDocById = new Map(sessionDocs.map((doc) => [doc.sessionId, doc]));
+
+    const recordedAt = new Date();
+    const bulkOps: any[] = [];
+
+    for (const team of gameState.teams) {
+      const ranking = rankingByTeamId.get(team.teamId);
+      if (!ranking) {
+        continue;
+      }
+
+      const sessionDoc = sessionDocById.get(team.sessionId);
+      const teamName = team.teamName || `City ${team.citySlot}`;
+      const roleRows: Array<{ role: 'municipality' | 'mrf' | 'broker'; userId: string; playerName: string }> = [
+        {
+          role: 'municipality',
+          userId: String(team.players.municipality || ''),
+          playerName: String(sessionDoc?.playerNames?.municipality || ''),
+        },
+        {
+          role: 'mrf',
+          userId: String(team.players.mrf || ''),
+          playerName: String(sessionDoc?.playerNames?.mrf || ''),
+        },
+        {
+          role: 'broker',
+          userId: String(team.players.broker || ''),
+          playerName: String(sessionDoc?.playerNames?.broker || ''),
+        },
+      ];
+
+      for (const row of roleRows) {
+        if (!row.userId) {
+          continue;
+        }
+
+        bulkOps.push({
+          updateOne: {
+            filter: {
+              roomCode,
+              teamSessionId: team.sessionId,
+              userId: row.userId,
+              roleInGame: row.role,
+            },
+            update: {
+              $set: {
+                userId: row.userId,
+                roomCode,
+                teamSessionId: team.sessionId,
+                teamId: team.teamId,
+                roleInGame: row.role,
+                playerName: row.playerName || row.role,
+                rank: ranking.rank,
+                city: team.citySlot,
+                teamName,
+                score: ranking.totalScore,
+                budget: ranking.budget,
+                health: ranking.health,
+                status: ranking.status,
+                recordedAt,
+              },
+            },
+            upsert: true,
+          },
+        });
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await PlayerGameResult.bulkWrite(bulkOps);
+    }
   }
 
   // ============================================

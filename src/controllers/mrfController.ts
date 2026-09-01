@@ -12,7 +12,6 @@ export const processWaste = asyncHandler(
     
     // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
-    console.log('[processWaste] User role:', userRole);
     
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can process waste');
@@ -33,7 +32,6 @@ export const assignGrade = asyncHandler(
 
     // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
-    console.log('[assignGrade] User role:', userRole);
     
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can assign grades');
@@ -78,7 +76,6 @@ export const getQueue = asyncHandler(
 
     // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
-    console.log('[getQueue] User role:', userRole);
     
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can view queue');
@@ -105,7 +102,6 @@ export const getMRFInventory = asyncHandler(
 
     // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
-    console.log('[getMRFInventory] User role:', userRole);
     
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can view MRF inventory');
@@ -137,7 +133,6 @@ export const getPendingAuctions = asyncHandler(
 
     // ✅ Verify user has MRF role
     const userRole = await GameService.getPlayerRole(sessionId, userId);
-    console.log('[getPendingAuctions] User role:', userRole);
     
     if (userRole !== 'mrf') {
       sendResponse(res, 403, 'Only MRF player can view pending auctions');

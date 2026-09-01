@@ -16,13 +16,10 @@ export class MRFService {
   private static readonly LANDFILL_COST_MULTIPLIER = 0.7;
   private static readonly LANDFILL_CO2_MULTIPLIER = 0.5;
 
-    private static readonly TRANSPORT_DURATIONS = {
+  private static readonly TRANSPORT_DURATIONS = {
     fast: DEFAULT_GAME_CONSTANTS.TRANSPORT_FAST_DURATION_SECONDS * 1000,
     slow: DEFAULT_GAME_CONSTANTS.TRANSPORT_SLOW_DURATION_SECONDS * 1000,
   };
-
-
-  private static transportTimers: Map<string, NodeJS.Timeout> = new Map();
 
   // ✅ Process waste from queue
   static async processWaste(
@@ -496,24 +493,6 @@ export class MRFService {
     // Reserve material so it can no longer be listed/selected for auction
     team.marketplaceListing.splice(auctionIndex, 1);
 
-    const timerKey = `${sessionId}:${activeTransport.id}`;
-    const existingTimer = this.transportTimers.get(timerKey);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.transportTimers.delete(timerKey);
-    }
-
-    const timer = setTimeout(async () => {
-      this.transportTimers.delete(timerKey);
-      try {
-        await this.completeMrfMaterialTransports(sessionId);
-      } catch {
-        // Fallback path is periodic system-check
-      }
-    }, Math.max(0, activeTransport.endTime - now));
-
-    this.transportTimers.set(timerKey, timer);
-
     team.activityLog.unshift(
       `[MRF] Started ${mode} transport: ${auction.mass.toFixed(1)} tons ${auction.materialType} back to Municipality inventory ` +
         `(Cost: $${transportCost.toFixed(0)}, CO₂: +${transportCO2.toFixed(1)}t, ETA: ${this.TRANSPORT_DURATIONS[mode] / 1000}s)`
@@ -594,12 +573,6 @@ export class MRFService {
           materialType,
         });
 
-        const timerKey = `${sessionId}:${transport.id}`;
-        const existingTimer = this.transportTimers.get(timerKey);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-          this.transportTimers.delete(timerKey);
-        }
       }
     }
 

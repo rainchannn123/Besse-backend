@@ -50,7 +50,11 @@ router.get('/auctions', getActiveAuctions);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/place-bid', validate(placeBidSchema), placeBid);
+router.post(
+  '/place-bid',
+  validate(placeBidSchema),
+  placeBid
+);
 
 /**
  * @swagger

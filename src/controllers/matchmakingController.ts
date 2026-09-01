@@ -278,3 +278,21 @@ export const adminGetAllRooms = asyncHandler(
     sendResponse(res, 200, 'All rooms retrieved successfully', { rooms: sanitizedRooms });
   }
 );
+
+export const getSessionActiveRoom = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { sessionId } = req.params;
+    const currentUser = (req as any).user;
+
+    if (!sessionId) {
+      throw new ValidationError('Session ID is required');
+    }
+
+    if (!currentUser?.currentSession || String(currentUser.currentSession) !== String(sessionId)) {
+      throw new ForbiddenError('You can only query your own active session room');
+    }
+
+    const room = await MatchmakingService.getActiveRoomBySession(sessionId);
+    sendResponse(res, 200, 'Session active room retrieved', { room });
+  }
+);

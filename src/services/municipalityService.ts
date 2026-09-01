@@ -13,13 +13,10 @@ export class MunicipalityService {
     slow: 25,
   };
 
-    private static readonly TRANSPORT_DURATIONS = {
+  private static readonly TRANSPORT_DURATIONS = {
     fast: DEFAULT_GAME_CONSTANTS.TRANSPORT_FAST_DURATION_SECONDS * 1000,
     slow: DEFAULT_GAME_CONSTANTS.TRANSPORT_SLOW_DURATION_SECONDS * 1000,
   };
-
-
-  private static transportTimers: Map<string, NodeJS.Timeout> = new Map();
 
   static async collectWasteWithTransport(
     sessionId: string,
@@ -27,8 +24,15 @@ export class MunicipalityService {
     playerId: string,
     mode: 'fast' | 'slow'
   ): Promise<TeamData> {
+    const normalizedSessionId = String(sessionId || '').trim();
+    const normalizedBatchId = String(batchId || '').trim();
+
+    if (!normalizedSessionId || !normalizedBatchId) {
+      throw new ValidationError('Session ID and waste batch ID are required');
+    }
+
     // ✅ Get team data
-    const team = await GameService.getTeamData(sessionId);
+    const team = await GameService.getTeamData(normalizedSessionId);
     if (!team) {
       throw new Error('Team not found');
     }
@@ -38,9 +42,9 @@ export class MunicipalityService {
     }
 
     // ✅ Find batch
-    const batchIndex = team.wasteBatches.findIndex(b => b.id === batchId);
+    const batchIndex = team.wasteBatches.findIndex(b => b.id === normalizedBatchId);
     if (batchIndex === -1) {
-      throw new Error(`Waste batch not found. ID: ${batchId}`);
+      throw new NotFoundError(`Waste batch not found. ID: ${normalizedBatchId}`);
     }
 
     const batch = team.wasteBatches[batchIndex];
@@ -90,37 +94,18 @@ export class MunicipalityService {
     }
     team.activeTransports.push(activeTransport);
 
-    // Schedule near-real-time completion so MRF queue updates without waiting for system-check tick
-    const timerKey = `${sessionId}:${activeTransport.id}`;
-    const existingTimer = this.transportTimers.get(timerKey);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      this.transportTimers.delete(timerKey);
-    }
-
-    const timer = setTimeout(async () => {
-      this.transportTimers.delete(timerKey);
-      try {
-        await this.completeAllTransports(sessionId);
-      } catch {
-        // Fallback path is system-check; ignore timer errors
-      }
-    }, Math.max(0, activeTransport.endTime - now));
-
-    this.transportTimers.set(timerKey, timer);
-
     team.activityLog.unshift(
       `[Municipality] Started ${mode} transport of ${batch.mass.toFixed(1)} tons ${batch.origin} waste. ` +
       `Cost: $${transportCost.toFixed(0)}, Time: ${this.TRANSPORT_DURATIONS[mode] / 1000}s, CO₂: +${transportCO2.toFixed(1)}t`
     );
 
         // ✅ Update team data
-    await GameService.updateTeamData(sessionId, team);
+    await GameService.updateTeamData(normalizedSessionId, team);
 
-    const updatedGameState = await GameService.getGameState(sessionId);
+    const updatedGameState = await GameService.getGameState(normalizedSessionId);
     if (updatedGameState) {
       WebSocketService.broadcastGameStateUpdate(
-        sessionId,
+        normalizedSessionId,
         updatedGameState,
         'transport-started',
         {
@@ -138,7 +123,7 @@ export class MunicipalityService {
     }
 
     WebSocketService.broadcastPlayerAction(
-      sessionId,
+      normalizedSessionId,
       playerId,
       'Municipality',
       `started ${mode} transport of ${batch.mass.toFixed(1)}t ${batch.origin} waste ($${transportCost.toFixed(0)}, arrives in ${this.TRANSPORT_DURATIONS[mode] / 1000}s)`
@@ -211,12 +196,6 @@ export class MunicipalityService {
           destination: 'mrf',
         });
 
-        const timerKey = `${sessionId}:${transport.id}`;
-        const existingTimer = this.transportTimers.get(timerKey);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-          this.transportTimers.delete(timerKey);
-        }
       }
     }
 

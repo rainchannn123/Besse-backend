@@ -10,10 +10,6 @@ export const collectWaste = asyncHandler(
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    console.log(
-      `[DEBUG] Collect waste request - SessionId: ${sessionId}, BatchId: ${batchId}, UserId: ${userId}`
-    );
-
     const gameState = await GameService.collectWaste(
       sessionId,
       batchId,
@@ -30,8 +26,6 @@ export const collectWasteWithTransport = asyncHandler(
     const { sessionId } = req.params;
     const userId = (req as any).user._id;
 
-    console.log(`[DEBUG] Collect waste with transport - SessionId: ${sessionId}, BatchId: ${batchId}, Mode: ${mode}, UserId: ${userId}`);
-
     const gameStateResult = await MunicipalityService.collectWasteWithTransport(
       sessionId,
       batchId,
@@ -45,8 +39,14 @@ export const collectWasteWithTransport = asyncHandler(
 
 export const rejectWaste = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const { batchId, sessionId } = req.body;
+    const { batchId } = req.body;
+    const sessionId = req.params.sessionId || req.body.sessionId;
     const userId = (req as any).user._id;
+
+    if (!sessionId) {
+      sendResponse(res, 400, 'Session ID is required');
+      return;
+    }
 
     const userRole = await GameService.getPlayerRole(sessionId, userId);
     if (userRole !== 'municipality') {

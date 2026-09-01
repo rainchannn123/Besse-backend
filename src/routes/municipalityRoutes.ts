@@ -7,8 +7,10 @@ import {
   getMunicipalityInventory,
   getWasteBatches,
   rejectWaste,
+  viewBrokerMaterials,
 } from '../controllers/municipalityController';
 import { protect } from '../middleware/auth';
+import { idempotency } from '../middleware/idempotency';
 import { validate } from '../utils/validation';
 import { z } from 'zod';
 
@@ -30,6 +32,15 @@ const collectWasteTransportSchema = z.object({
   body: z.object({
     batchId: z.string().min(1, 'Batch ID is required'),
     mode: z.enum(['fast', 'slow']),
+  }),
+  params: z.object({
+    sessionId: z.string().min(1, 'Session ID is required'),
+  }),
+});
+
+const rejectWasteSchema = z.object({
+  body: z.object({
+    batchId: z.string().min(1, 'Batch ID is required'),
   }),
   params: z.object({
     sessionId: z.string().min(1, 'Session ID is required'),
@@ -59,6 +70,10 @@ const constructProjectSchema = z.object({
 router.post(
   '/collect-waste/:sessionId',
   validate(collectWasteSchema),
+  idempotency({
+    scope: 'municipality.collect-waste',
+    resolveScope: (req) => req.params.sessionId,
+  }),
   collectWaste
 );
 
@@ -74,6 +89,10 @@ router.post(
 router.post(
   '/collect-waste-transport/:sessionId',
   validate(collectWasteTransportSchema),
+  idempotency({
+    scope: 'municipality.collect-waste-transport',
+    resolveScope: (req) => req.params.sessionId,
+  }),
   collectWasteWithTransport
 );
 
@@ -87,6 +106,8 @@ router.post(
  *       - bearerAuth: []
  */
 router.get('/waste-batches/:sessionId', getWasteBatches);
+router.post('/reject-waste/:sessionId', validate(rejectWasteSchema), rejectWaste);
+router.get('/broker-materials/:sessionId', viewBrokerMaterials);
 
 /**
  * @swagger

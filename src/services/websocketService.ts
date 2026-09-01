@@ -6,6 +6,11 @@ import {
 } from '../middleware/socketAuth';
 import { GameState } from '../types';
 import { logger } from '../utils/logger';
+import {
+  parseInboundSocketPayload,
+  parseOutboundSocketPayload,
+} from '../utils/websocketContracts';
+import { ObservabilityService } from './observabilityService';
 import { GameService } from './gameService';
 import MatchmakingRoom from '../models/MatchmakingRoom';
 
@@ -174,12 +179,24 @@ export class WebSocketService {
 
   private static setupSocketHandlers() {
     this.io.on('connection', (socket: AuthenticatedSocket) => {
+      ObservabilityService.recordSocketConnection();
       logger.info(
         `Client connected: ${socket.id} (User: ${socket.user?.name})`
       );
 
       socket.on('join-game', async (data: { sessionId: string }) => {
-        const { sessionId } = data;
+        const parsedPayload = parseInboundSocketPayload('join-game', data);
+        if (!parsedPayload) {
+          ObservabilityService.recordSocketEvent({
+            event: 'join-game',
+            channel: 'game',
+            dropped: true,
+          });
+          socket.emit('error', { message: 'Invalid join-game payload' });
+          return;
+        }
+
+        const { sessionId } = parsedPayload;
 
         logger.info(
           `[WebSocket] join-game event received: sessionId=${sessionId}, userId=${socket.userId}, userName=${socket.user?.name}`
@@ -233,7 +250,18 @@ export class WebSocketService {
       });
 
       socket.on('join-admin-monitor-room', (data: { roomCode: string }) => {
-        const normalizedRoomCode = String(data?.roomCode || '').trim().toUpperCase();
+        const parsedPayload = parseInboundSocketPayload('join-admin-monitor-room', data);
+        if (!parsedPayload) {
+          ObservabilityService.recordSocketEvent({
+            event: 'join-admin-monitor-room',
+            channel: 'all',
+            dropped: true,
+          });
+          socket.emit('error', { message: 'Invalid room payload' });
+          return;
+        }
+
+        const normalizedRoomCode = parsedPayload.roomCode.trim().toUpperCase();
 
         if (!normalizedRoomCode) {
           socket.emit('error', { message: 'Room code is required' });
@@ -258,8 +286,12 @@ export class WebSocketService {
       });
 
       socket.on('leave-admin-monitor-room', (data: { roomCode: string }) => {
-        const normalizedRoomCode = String(data?.roomCode || '').trim().toUpperCase();
-        if (!normalizedRoomCode) return;
+        const parsedPayload = parseInboundSocketPayload('leave-admin-monitor-room', data);
+        if (!parsedPayload) {
+          return;
+        }
+
+        const normalizedRoomCode = parsedPayload.roomCode.trim().toUpperCase();
 
         const monitorRoom = this.getAdminMonitorRoomName(normalizedRoomCode);
         socket.leave(monitorRoom);
@@ -270,7 +302,18 @@ export class WebSocketService {
       });
 
       socket.on('join-matchmaking-room', async (data: { roomCode: string }) => {
-        const { roomCode } = data;
+        const parsedPayload = parseInboundSocketPayload('join-matchmaking-room', data);
+        if (!parsedPayload) {
+          ObservabilityService.recordSocketEvent({
+            event: 'join-matchmaking-room',
+            channel: 'matchmaking',
+            dropped: true,
+          });
+          socket.emit('error', { message: 'Invalid matchmaking room payload' });
+          return;
+        }
+
+        const { roomCode } = parsedPayload;
         const userId = socket.userId!;
 
 
@@ -325,7 +368,12 @@ export class WebSocketService {
       });
 
       socket.on('leave-matchmaking-room', async (data: { roomCode: string }) => {
-        const { roomCode } = data;
+        const parsedPayload = parseInboundSocketPayload('leave-matchmaking-room', data);
+        if (!parsedPayload) {
+          return;
+        }
+
+        const { roomCode } = parsedPayload;
         const roomSocketId = `matchmaking-${roomCode}`;
         socket.leave(roomSocketId);
 
@@ -335,7 +383,18 @@ export class WebSocketService {
       });
 
       socket.on('room:ready-toggle', async (data: { roomCode: string; sessionId: string }) => {
-        const { roomCode, sessionId } = data;
+        const parsedPayload = parseInboundSocketPayload('room:ready-toggle', data);
+        if (!parsedPayload) {
+          ObservabilityService.recordSocketEvent({
+            event: 'room:ready-toggle',
+            channel: 'matchmaking',
+            dropped: true,
+          });
+          socket.emit('error', { message: 'Invalid ready-toggle payload' });
+          return;
+        }
+
+        const { roomCode, sessionId } = parsedPayload;
         const userId = socket.userId!;
 
         try {
@@ -394,7 +453,12 @@ export class WebSocketService {
       });
 
             socket.on('leave-game', (data: { sessionId: string }) => {
-        const { sessionId } = data;
+        const parsedPayload = parseInboundSocketPayload('leave-game', data);
+        if (!parsedPayload) {
+          return;
+        }
+
+        const { sessionId } = parsedPayload;
 
         socket.leave(sessionId);
         this.revokeSessionAuthorization(socket, sessionId);
@@ -412,7 +476,18 @@ export class WebSocketService {
       });
 
       socket.on('surrender-toggle', async (data: { sessionId: string }) => {
-        const { sessionId } = data;
+        const parsedPayload = parseInboundSocketPayload('surrender-toggle', data);
+        if (!parsedPayload) {
+          ObservabilityService.recordSocketEvent({
+            event: 'surrender-toggle',
+            channel: 'game',
+            dropped: true,
+          });
+          socket.emit('error', { message: 'Invalid surrender payload' });
+          return;
+        }
+
+        const { sessionId } = parsedPayload;
         const playerId = socket.userId!;
 
         try {
@@ -500,7 +575,18 @@ export class WebSocketService {
 
             // Team chat (only visible within same game session room)
       socket.on('team-chat-message', async (data: { sessionId: string; message: string }) => {
-        const { sessionId, message } = data || {};
+        const parsedPayload = parseInboundSocketPayload('team-chat-message', data);
+        if (!parsedPayload) {
+          ObservabilityService.recordSocketEvent({
+            event: 'team-chat-message',
+            channel: 'game',
+            dropped: true,
+          });
+          socket.emit('error', { message: 'Invalid team chat payload' });
+          return;
+        }
+
+        const { sessionId, message } = parsedPayload;
 
         try {
           const normalizedSessionId = String(sessionId || '').trim();
@@ -550,13 +636,11 @@ export class WebSocketService {
             return;
           }
 
-          this.io.to(normalizedSessionId).emit('team-chat-message', {
+          this.emitToGameRoom(normalizedSessionId, 'team-chat-message', {
             senderId: socket.userId,
             senderName: socket.user?.name || 'Unknown',
             senderRole: socket.user?.role || 'player',
             message: normalizedMessage,
-            sessionId: normalizedSessionId,
-            timestamp: Date.now(),
           });
         } catch (err) {
           logger.error('[WebSocket] Error handling team-chat-message:', err);
@@ -566,6 +650,7 @@ export class WebSocketService {
 
 
       socket.on('disconnect', () => {
+        ObservabilityService.recordSocketDisconnection();
         logger.warn(
           `Client disconnected: ${socket.id} (User: ${socket.user?.name})`
         );
@@ -611,10 +696,27 @@ export class WebSocketService {
     );
 
 
-    this.io.to(sessionId).emit(event, {
+    const payload = {
       ...data,
       sessionId,
       timestamp: Date.now(),
+    };
+
+    const validatedPayload = parseOutboundSocketPayload(event, payload);
+    if (!validatedPayload) {
+      ObservabilityService.recordSocketEvent({
+        event,
+        channel: 'game',
+        dropped: true,
+      });
+      return;
+    }
+
+    this.io.to(sessionId).emit(event, validatedPayload);
+    ObservabilityService.recordSocketEvent({
+      event,
+      channel: 'game',
+      dropped: false,
     });
   }
 
@@ -627,10 +729,27 @@ export class WebSocketService {
       `[WebSocket] Broadcasting '${event}' to matchmaking room '${roomCode}'`
     );
 
-    this.io.to(roomSocketId).emit(event, {
+    const payload = {
       ...data,
       roomCode,
       timestamp: Date.now(),
+    };
+
+    const validatedPayload = parseOutboundSocketPayload(event, payload);
+    if (!validatedPayload) {
+      ObservabilityService.recordSocketEvent({
+        event,
+        channel: 'matchmaking',
+        dropped: true,
+      });
+      return;
+    }
+
+    this.io.to(roomSocketId).emit(event, validatedPayload);
+    ObservabilityService.recordSocketEvent({
+      event,
+      channel: 'matchmaking',
+      dropped: false,
     });
   }
 
@@ -645,6 +764,12 @@ export class WebSocketService {
     this.io.emit(event, {
       ...data,
       timestamp: Date.now(),
+    });
+
+    ObservabilityService.recordSocketEvent({
+      event,
+      channel: 'all',
+      dropped: false,
     });
   }
 
@@ -731,12 +856,38 @@ export class WebSocketService {
       actionDetails,
     };
 
-    // Rich action event used by role pages (backward compatible)
-    this.emitToGameRoom(sessionId, 'game-state-updated', payload);
+    const targetSessionIds = new Set<string>();
 
-    // Canonical state event used by layout/footer for immediate HUD refresh.
-    // Coalesced to reduce emit pressure during action bursts.
-    this.queueCoalescedGameStateUpdate(sessionId, payload);
+    if (Array.isArray(gameState?.teams)) {
+      for (const team of gameState.teams) {
+        const teamSessionId = String(team?.sessionId || '').trim();
+        if (teamSessionId) {
+          targetSessionIds.add(teamSessionId);
+        }
+      }
+    }
+
+    if (targetSessionIds.size === 0 && Array.isArray((gameState as any)?.roomTeams)) {
+      for (const roomTeam of (gameState as any).roomTeams) {
+        const roomSessionId = String(roomTeam?.sessionId || '').trim();
+        if (roomSessionId) {
+          targetSessionIds.add(roomSessionId);
+        }
+      }
+    }
+
+    if (targetSessionIds.size === 0) {
+      targetSessionIds.add(sessionId);
+    }
+
+    for (const targetSessionId of targetSessionIds) {
+      // Rich action event used by role pages (backward compatible)
+      this.emitToGameRoom(targetSessionId, 'game-state-updated', payload);
+
+      // Canonical state event used by layout/footer for immediate HUD refresh.
+      // Coalesced to reduce emit pressure during action bursts.
+      this.queueCoalescedGameStateUpdate(targetSessionId, payload);
+    }
 
     if (gameState?.roomCode) {
       this.emitAdminTelemetryUpdate(gameState.roomCode, {
@@ -746,8 +897,8 @@ export class WebSocketService {
       });
     }
 
-        logger.debug(
-      `Broadcasted game state update for session ${sessionId} - Action: ${actionType}`
+    logger.debug(
+      `Broadcasted game state update to ${targetSessionIds.size} session(s) - Action: ${actionType}`
     );
 
   }

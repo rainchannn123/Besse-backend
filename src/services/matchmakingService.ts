@@ -344,6 +344,11 @@ export class MatchmakingService {
     // Remove team
     room.teams.splice(teamIndex, 1);
 
+    WebSocketService.emitToGameRoom(sessionId, 'room:left', {
+      roomCode: room.roomCode,
+      redirect: '/dashboard/matchmaking-lobby',
+    });
+
     // If room is empty, delete it
     if (room.teams.length === 0) {
       await MatchmakingRoom.deleteOne({ _id: room._id });
@@ -379,6 +384,19 @@ export class MatchmakingService {
 
     if (!room) {
       throw new NotFoundError('Room not found');
+    }
+
+    return this.sanitizeRoom(room);
+  }
+
+  static async getActiveRoomBySession(sessionId: string): Promise<any | null> {
+    const room = await MatchmakingRoom.findOne({
+      'teams.sessionId': sessionId,
+      status: { $in: ['waiting', 'ready', 'started'] },
+    });
+
+    if (!room) {
+      return null;
     }
 
     return this.sanitizeRoom(room);
@@ -491,6 +509,7 @@ export class MatchmakingService {
       maxTeams: roomObj.maxTeams,
       teams: roomObj.teams.map((t: any) => ({
         teamId: t.teamId,
+        sessionId: t.sessionId,
         citySlot: t.citySlot,
         players: t.players.map((p: any) => ({
           userId: p.userId,

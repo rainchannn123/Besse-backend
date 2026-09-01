@@ -75,6 +75,9 @@ const envSchema = z.object({
     .transform(value => value === 'true'),
   ADMIN_MONITOR_TELEMETRY_INTERVAL_MS: z.string().default('15000').transform(Number),
 
+  // Optional key to protect observability endpoints (/api/health/metrics, /api/health/slo)
+  OBSERVABILITY_METRICS_KEY: z.string().default(''),
+
   // Chatbot / LLM configuration
   CHATBOT_ENABLED: z
     .string()

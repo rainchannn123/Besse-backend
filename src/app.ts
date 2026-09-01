@@ -20,9 +20,17 @@ import mrfRoutes from './routes/mrfRoutes';
 import municipalityRoutes from './routes/municipalityRoutes';
 import { GameService } from './services/gameService';
 import { AdminMonitorTelemetryService } from './services/adminMonitorTelemetryService';
+import { BrokerService } from './services/brokerService';
+import { ObservabilityService } from './services/observabilityService';
+import { MRFService } from './services/mrfService';
+import { MunicipalityService } from './services/municipalityService';
+import { SchedulerLeaseService } from './services/schedulerLeaseService';
 import { WebSocketService } from './services/websocketService';
 import { NotFoundError } from './utils/AppError';
 import { logger } from './utils/logger';
+
+import dns from "node:dns/promises";
+dns.setServers(["1.1.1.1"]);
 
 const app = express();
 
@@ -93,6 +101,43 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime(),
     environment: env.NODE_ENV,
     version: process.env.npm_package_version || '1.0.0',
+  });
+});
+
+const isMetricsAuthorized = (headerValue: unknown): boolean => {
+  const configuredKey = String(env.OBSERVABILITY_METRICS_KEY || '').trim();
+  if (!configuredKey) {
+    return true;
+  }
+
+  return String(headerValue || '').trim() === configuredKey;
+};
+
+app.get('/api/health/metrics', (req, res) => {
+  const incomingKey = req.header('x-observability-key');
+  if (!isMetricsAuthorized(incomingKey)) {
+    res.status(403).json({ success: false, message: 'Forbidden' });
+    return;
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Observability metrics snapshot',
+    data: ObservabilityService.getMetricsSnapshot(),
+  });
+});
+
+app.get('/api/health/slo', (req, res) => {
+  const incomingKey = req.header('x-observability-key');
+  if (!isMetricsAuthorized(incomingKey)) {
+    res.status(403).json({ success: false, message: 'Forbidden' });
+    return;
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Observability SLO status',
+    data: ObservabilityService.getSloStatus(),
   });
 });
 
@@ -168,6 +213,8 @@ if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
 
 // Scheduled system checks (every 30 seconds)
 const SYSTEM_CHECK_INTERVAL = 30 * 1000;
+const TRANSPORT_COMPLETION_INTERVAL = 1 * 1000;
+const AUCTION_RESOLUTION_INTERVAL = 1 * 1000;
 
 const dedupeSessionIdsByRoom = (
   sessions: Array<{ sessionId: string; gameState?: { roomCode?: string | null } }>
@@ -187,29 +234,102 @@ const dedupeSessionIdsByRoom = (
 };
 
 setInterval(async () => {
-  try {
-    const activeSessions = await GameSession.find(
-      { 'gameState.gameStatus': 'active' },
-      { sessionId: 1, gameState: 1, _id: 0 }
-    ).lean();
+  await SchedulerLeaseService.runSingletonJob('scheduler.transport-completion', 1500, async () => {
+    try {
+      const activeSessions = await GameSession.find(
+        {
+          'gameState.gameStatus': 'active',
+          'gameState.teams.activeTransports.status': 'in-transit',
+        },
+        { sessionId: 1, gameState: 1, _id: 0 }
+      ).lean();
 
-    const targetSessionIds = dedupeSessionIdsByRoom(activeSessions);
+      // Transport completion is team-specific. Do not dedupe by room here,
+      // otherwise only one team in a room gets processed per tick.
+      const targetSessionIds = Array.from(
+        new Set(
+          (activeSessions as Array<{ sessionId: string }>).map((session) => session.sessionId)
+        )
+      );
 
-    logger.info(
-      `Running system checks for ${targetSessionIds.length} active room(s) (${activeSessions.length} active session documents)`
-    );
+      for (const sessionId of targetSessionIds) {
 
-    for (const sessionId of targetSessionIds) {
+        try {
+          await MunicipalityService.completeAllTransports(sessionId);
+        } catch (error) {
+          logger.error(`Transport completion (municipality) failed for session ${sessionId}`, error);
+        }
+
+        try {
+          await MRFService.completeMrfMaterialTransports(sessionId);
+        } catch (error) {
+          logger.error(`Transport completion (mrf) failed for session ${sessionId}`, error);
+        }
+      }
+    } catch (error) {
+      logger.error('Error during transport completion scheduler', error);
+    }
+  });
+}, TRANSPORT_COMPLETION_INTERVAL);
+
+setInterval(async () => {
+  await SchedulerLeaseService.runSingletonJob('scheduler.auction-resolution', 1500, async () => {
+    try {
+      const activeSessions = await GameSession.find(
+        {
+          'gameState.gameStatus': 'active',
+          'gameState.teams.marketplaceListing.status': 'active',
+        },
+        { sessionId: 1, gameState: 1, _id: 0 }
+      ).lean();
+
+      const uniqueSessionIds = dedupeSessionIdsByRoom(
+        activeSessions as Array<{ sessionId: string; gameState?: { roomCode?: string | null } }>
+      );
+
+      for (const sessionId of uniqueSessionIds) {
+        try {
+          await BrokerService.resolveExpiredAuctions(sessionId);
+        } catch (error) {
+          logger.error(`Auction resolution failed for session ${sessionId}`, error);
+        }
+      }
+    } catch (error) {
+      logger.error('Error during auction resolution scheduler', error);
+    }
+  });
+}, AUCTION_RESOLUTION_INTERVAL);
+
+setInterval(async () => {
+  await SchedulerLeaseService.runSingletonJob(
+    'scheduler.system-check',
+    Math.max(5_000, Math.floor(SYSTEM_CHECK_INTERVAL * 0.9)),
+    async () => {
       try {
-        await GameService.performSystemCheck(sessionId);
-        logger.info(`System check completed for session: ${sessionId}`);
+        const activeSessions = await GameSession.find(
+          { 'gameState.gameStatus': 'active' },
+          { sessionId: 1, gameState: 1, _id: 0 }
+        ).lean();
+
+        const targetSessionIds = dedupeSessionIdsByRoom(activeSessions);
+
+        logger.info(
+          `Running system checks for ${targetSessionIds.length} active room(s) (${activeSessions.length} active session documents)`
+        );
+
+        for (const sessionId of targetSessionIds) {
+          try {
+            await GameService.performSystemCheck(sessionId);
+            logger.info(`System check completed for session: ${sessionId}`);
+          } catch (error) {
+            logger.error(`System check failed for session ${sessionId}`, error);
+          }
+        }
       } catch (error) {
-        logger.error(`System check failed for session ${sessionId}`, error);
+        logger.error('Error during scheduled system checks', error);
       }
     }
-  } catch (error) {
-    logger.error('Error during scheduled system checks', error);
-  }
+  );
 }, SYSTEM_CHECK_INTERVAL);
 
 // Pairing scheduler - Commented out (replaced by matchmaking)
@@ -228,56 +348,58 @@ setInterval(async () => {
 
 // Countdown broadcaster
 setInterval(async () => {
-  try {
-    const gamesWithCountdown = await GameSession.find(
-      {
-        'gameState.gameOverCountdown.active': true,
-        'gameState.gameStatus': 'active',
-      },
-      { sessionId: 1, gameState: 1, _id: 0 }
-    ).lean();
+  await SchedulerLeaseService.runSingletonJob('scheduler.countdown-broadcaster', 1500, async () => {
+    try {
+      const gamesWithCountdown = await GameSession.find(
+        {
+          'gameState.gameOverCountdown.active': true,
+          'gameState.gameStatus': 'active',
+        },
+        { sessionId: 1, gameState: 1, _id: 0 }
+      ).lean();
 
-    const targetSessionIds = dedupeSessionIdsByRoom(gamesWithCountdown);
+      const targetSessionIds = dedupeSessionIdsByRoom(gamesWithCountdown);
 
-    for (const sessionId of targetSessionIds) {
-      const session = gamesWithCountdown.find((item) => item.sessionId === sessionId);
-      if (!session?.gameState) continue;
+      for (const sessionId of targetSessionIds) {
+        const session = gamesWithCountdown.find((item) => item.sessionId === sessionId);
+        if (!session?.gameState) continue;
 
-      const gameState = session.gameState;
+        const gameState = session.gameState;
 
-      if (
-        gameState.gameOverCountdown &&
-        gameState.gameOverCountdown.active &&
-        gameState.gameOverCountdown.startTime
-      ) {
-        const now = Date.now();
-        const elapsed = (now - gameState.gameOverCountdown.startTime) / 1000;
-        const timeRemaining = Math.max(
-          0,
-          (gameState.constants?.COUNTDOWN_DURATION_SECONDS || 30) - elapsed
-        );
-
-        if (timeRemaining > 0) {
-          const team = gameState.teams?.find((t: any) => t.sessionId === sessionId);
-          const teamLabel = team ? `City ${team.citySlot}` : 'Unknown';
-
-          WebSocketService.broadcastSystemMessage(
-            sessionId,
-            `GAME OVER of TEAM ${teamLabel} IN ${Math.ceil(timeRemaining)} SECONDS`,
-            'warning'
+        if (
+          gameState.gameOverCountdown &&
+          gameState.gameOverCountdown.active &&
+          gameState.gameOverCountdown.startTime
+        ) {
+          const now = Date.now();
+          const elapsed = (now - gameState.gameOverCountdown.startTime) / 1000;
+          const timeRemaining = Math.max(
+            0,
+            (gameState.constants?.COUNTDOWN_DURATION_SECONDS || 30) - elapsed
           );
-        } else {
-          try {
-            await GameService.performSystemCheck(sessionId);
-          } catch (err) {
-            logger.error('Error finalizing game on countdown expiry', err);
+
+          if (timeRemaining > 0) {
+            const team = gameState.teams?.find((t: any) => t.sessionId === sessionId);
+            const teamLabel = team ? `City ${team.citySlot}` : 'Unknown';
+
+            WebSocketService.broadcastSystemMessage(
+              sessionId,
+              `GAME OVER of TEAM ${teamLabel} IN ${Math.ceil(timeRemaining)} SECONDS`,
+              'warning'
+            );
+          } else {
+            try {
+              await GameService.performSystemCheck(sessionId);
+            } catch (err) {
+              logger.error('Error finalizing game on countdown expiry', err);
+            }
           }
         }
       }
+    } catch (error) {
+      logger.error('Error during countdown broadcaster', error);
     }
-  } catch (error) {
-    logger.error('Error during countdown broadcaster', error);
-  }
+  });
 }, 1000);
 
 server.listen(PORT, () => {
@@ -291,6 +413,12 @@ server.listen(PORT, () => {
   );
 
   logger.info(`System checks scheduled every ${SYSTEM_CHECK_INTERVAL / 1000} seconds`);
+  logger.info(
+    `Transport completion scheduler running every ${TRANSPORT_COMPLETION_INTERVAL / 1000} seconds`
+  );
+  logger.info(
+    `Auction resolution scheduler running every ${AUCTION_RESOLUTION_INTERVAL / 1000} seconds`
+  );
 
   if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
     logger.info(
