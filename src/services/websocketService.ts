@@ -12,11 +12,159 @@ import MatchmakingRoom from '../models/MatchmakingRoom';
 export class WebSocketService {
   private static io: SocketIOServer;
   private static gameRooms: Map<string, Set<string>> = new Map();
+  private static pendingGameStateUpdates: Map<
+    string,
+    { payload: Record<string, any>; timer: NodeJS.Timeout }
+  > = new Map();
+  private static socketRateLimitState: Map<
+    string,
+    Map<string, { count: number; windowStartedAt: number; lastWarnAt: number }>
+  > = new Map();
   private static readonly ADMIN_MONITOR_ROOM_PREFIX = 'admin-monitor-';
+  private static gameStateCoalesceMs = 75;
+  private static teamChatRateWindowMs = 10_000;
+  private static teamChatRateMaxMessages = 20;
+  private static teamChatMaxMessageChars = 400;
 
-    private static getAdminMonitorRoomName(roomCode: string): string {
+  static configure(options: {
+    gameStateCoalesceMs?: number;
+    teamChatRateWindowMs?: number;
+    teamChatRateMaxMessages?: number;
+    teamChatMaxMessageChars?: number;
+  }) {
+    if (typeof options.gameStateCoalesceMs === 'number') {
+      this.gameStateCoalesceMs = Math.min(
+        500,
+        Math.max(20, Math.floor(options.gameStateCoalesceMs))
+      );
+    }
+
+    if (typeof options.teamChatRateWindowMs === 'number') {
+      this.teamChatRateWindowMs = Math.min(
+        60_000,
+        Math.max(1_000, Math.floor(options.teamChatRateWindowMs))
+      );
+    }
+
+    if (typeof options.teamChatRateMaxMessages === 'number') {
+      this.teamChatRateMaxMessages = Math.min(
+        200,
+        Math.max(1, Math.floor(options.teamChatRateMaxMessages))
+      );
+    }
+
+    if (typeof options.teamChatMaxMessageChars === 'number') {
+      this.teamChatMaxMessageChars = Math.min(
+        2_000,
+        Math.max(80, Math.floor(options.teamChatMaxMessageChars))
+      );
+    }
+  }
+
+  private static getAdminMonitorRoomName(roomCode: string): string {
     return `${this.ADMIN_MONITOR_ROOM_PREFIX}${String(roomCode || '').trim().toUpperCase()}`;
   }
+
+  private static ensureAuthorizedSessionCache(socket: AuthenticatedSocket): Set<string> {
+    if (!socket.authorizedSessionIds) {
+      socket.authorizedSessionIds = new Set<string>();
+    }
+
+    return socket.authorizedSessionIds;
+  }
+
+  private static markSessionAuthorized(socket: AuthenticatedSocket, sessionId: string): void {
+    this.ensureAuthorizedSessionCache(socket).add(sessionId);
+  }
+
+  private static revokeSessionAuthorization(socket: AuthenticatedSocket, sessionId: string): void {
+    this.ensureAuthorizedSessionCache(socket).delete(sessionId);
+  }
+
+  private static async isSessionAuthorizedOrValidate(
+    socket: AuthenticatedSocket,
+    sessionId: string
+  ): Promise<boolean> {
+    const authorizedSessions = this.ensureAuthorizedSessionCache(socket);
+    if (authorizedSessions.has(sessionId)) {
+      return true;
+    }
+
+    const hasAccess = await validateGameAccess(socket, sessionId);
+    if (hasAccess) {
+      authorizedSessions.add(sessionId);
+    }
+
+    return hasAccess;
+  }
+
+  private static consumeSocketRateLimit(
+    socketId: string,
+    key: string,
+    maxPerWindow: number,
+    windowMs: number
+  ): { allowed: boolean; retryAfterMs: number; shouldWarn: boolean } {
+    const now = Date.now();
+    let limitsByKey = this.socketRateLimitState.get(socketId);
+
+    if (!limitsByKey) {
+      limitsByKey = new Map();
+      this.socketRateLimitState.set(socketId, limitsByKey);
+    }
+
+    const current = limitsByKey.get(key);
+    if (!current || now - current.windowStartedAt >= windowMs) {
+      limitsByKey.set(key, {
+        count: 1,
+        windowStartedAt: now,
+        lastWarnAt: 0,
+      });
+
+      return { allowed: true, retryAfterMs: 0, shouldWarn: false };
+    }
+
+    current.count += 1;
+    if (current.count <= maxPerWindow) {
+      return { allowed: true, retryAfterMs: 0, shouldWarn: false };
+    }
+
+    const retryAfterMs = Math.max(0, windowMs - (now - current.windowStartedAt));
+    const shouldWarn = now - current.lastWarnAt > Math.min(windowMs, 30_000);
+    if (shouldWarn) {
+      current.lastWarnAt = now;
+    }
+
+    return { allowed: false, retryAfterMs, shouldWarn };
+  }
+
+  private static clearSocketRateLimitState(socketId: string): void {
+    this.socketRateLimitState.delete(socketId);
+  }
+
+  private static queueCoalescedGameStateUpdate(
+    sessionId: string,
+    payload: Record<string, any>
+  ): void {
+    const existingEntry = this.pendingGameStateUpdates.get(sessionId);
+    if (existingEntry) {
+      existingEntry.payload = payload;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const pendingEntry = this.pendingGameStateUpdates.get(sessionId);
+      if (!pendingEntry) return;
+
+      this.pendingGameStateUpdates.delete(sessionId);
+      this.emitToGameRoom(sessionId, 'game-state-update', pendingEntry.payload);
+    }, this.gameStateCoalesceMs);
+
+    this.pendingGameStateUpdates.set(sessionId, {
+      payload,
+      timer,
+    });
+  }
+
 
   static initialize(io: SocketIOServer) {
     this.io = io;
@@ -49,18 +197,22 @@ export class WebSocketService {
             return;
           }
 
-          socket.rooms.forEach(room => {
+                    socket.rooms.forEach((room) => {
             if (room !== socket.id) {
               logger.info(
                 `[WebSocket] User ${socket.user?.name} leaving room: ${room}`
               );
+              this.revokeSessionAuthorization(socket, room);
               socket.leave(room);
             }
           });
 
+
           socket.join(sessionId);
+          this.markSessionAuthorized(socket, sessionId);
 
           if (!this.gameRooms.has(sessionId)) {
+
             this.gameRooms.set(sessionId, new Set());
           }
           this.gameRooms.get(sessionId)!.add(socket.id);
@@ -241,12 +393,14 @@ export class WebSocketService {
         }
       });
 
-      socket.on('leave-game', (data: { sessionId: string }) => {
+            socket.on('leave-game', (data: { sessionId: string }) => {
         const { sessionId } = data;
 
         socket.leave(sessionId);
+        this.revokeSessionAuthorization(socket, sessionId);
 
         const roomSockets = this.gameRooms.get(sessionId);
+
         if (roomSockets) {
           roomSockets.delete(socket.id);
           if (roomSockets.size === 0) {
@@ -344,28 +498,64 @@ export class WebSocketService {
         }
       });
 
-      // Team chat (only visible within same game session room)
+            // Team chat (only visible within same game session room)
       socket.on('team-chat-message', async (data: { sessionId: string; message: string }) => {
         const { sessionId, message } = data || {};
 
         try {
-          if (!sessionId || !message || !message.trim()) {
+          const normalizedSessionId = String(sessionId || '').trim();
+          const normalizedMessage = String(message || '').trim();
+
+          if (!normalizedSessionId || !normalizedMessage) {
             socket.emit('error', { message: 'Invalid team chat payload' });
             return;
           }
 
-          const hasAccess = await validateGameAccess(socket, sessionId);
+          if (normalizedMessage.length > this.teamChatMaxMessageChars) {
+            socket.emit('error', {
+              message: `Team chat message is too long (max ${this.teamChatMaxMessageChars} characters)`,
+            });
+            return;
+          }
+
+          const rateLimit = this.consumeSocketRateLimit(
+            socket.id,
+            `team-chat-message:${normalizedSessionId}`,
+            this.teamChatRateMaxMessages,
+            this.teamChatRateWindowMs
+          );
+
+          if (!rateLimit.allowed) {
+            if (rateLimit.shouldWarn) {
+              logger.warn(
+                `[WebSocket] Team chat rate limit exceeded: socket=${socket.id}, userId=${socket.userId}, sessionId=${normalizedSessionId}`
+              );
+            }
+
+            socket.emit('error', {
+              message: `Too many team chat messages. Please wait ${Math.max(
+                1,
+                Math.ceil(rateLimit.retryAfterMs / 1000)
+              )}s and try again.`,
+            });
+            return;
+          }
+
+          const hasAccess = await this.isSessionAuthorizedOrValidate(
+            socket,
+            normalizedSessionId
+          );
           if (!hasAccess) {
             socket.emit('error', { message: 'You do not have access to this game session' });
             return;
           }
 
-                    this.io.to(sessionId).emit('team-chat-message', {
+          this.io.to(normalizedSessionId).emit('team-chat-message', {
             senderId: socket.userId,
             senderName: socket.user?.name || 'Unknown',
             senderRole: socket.user?.role || 'player',
-            message: message.trim(),
-            sessionId,
+            message: normalizedMessage,
+            sessionId: normalizedSessionId,
             timestamp: Date.now(),
           });
         } catch (err) {
@@ -374,12 +564,17 @@ export class WebSocketService {
         }
       });
 
+
       socket.on('disconnect', () => {
         logger.warn(
           `Client disconnected: ${socket.id} (User: ${socket.user?.name})`
         );
 
+        socket.authorizedSessionIds?.clear();
+        this.clearSocketRateLimitState(socket.id);
+
         this.gameRooms.forEach((sockets, sessionId) => {
+
           if (sockets.has(socket.id)) {
             sockets.delete(socket.id);
             if (sockets.size === 0) {
@@ -411,9 +606,10 @@ export class WebSocketService {
    */
   static emitToGameRoom(sessionId: string, event: string, data: any) {
     const roomSize = this.gameRooms.get(sessionId)?.size || 0;
-    logger.info(
+        logger.debug(
       `[WebSocket] Broadcasting '${event}' to room '${sessionId}' (${roomSize} connected clients)`
     );
+
 
     this.io.to(sessionId).emit(event, {
       ...data,
@@ -538,8 +734,9 @@ export class WebSocketService {
     // Rich action event used by role pages (backward compatible)
     this.emitToGameRoom(sessionId, 'game-state-updated', payload);
 
-    // Canonical state event used by layout/footer for immediate HUD refresh
-    this.emitToGameRoom(sessionId, 'game-state-update', payload);
+    // Canonical state event used by layout/footer for immediate HUD refresh.
+    // Coalesced to reduce emit pressure during action bursts.
+    this.queueCoalescedGameStateUpdate(sessionId, payload);
 
     if (gameState?.roomCode) {
       this.emitAdminTelemetryUpdate(gameState.roomCode, {
@@ -549,9 +746,10 @@ export class WebSocketService {
       });
     }
 
-    logger.info(
+        logger.debug(
       `Broadcasted game state update for session ${sessionId} - Action: ${actionType}`
     );
+
   }
 
   static emitAdminTelemetryUpdate(

@@ -5,7 +5,6 @@ import { Server as SocketIOServer } from 'socket.io';
 import connectDB from './config/database';
 import { env } from './config/env';
 import { specs, swaggerUi } from './config/swagger';
-import { activityLogger } from './middleware/activityLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { errorLogger, requestLogger } from './middleware/logger';
 import { securityHeaders } from './middleware/security';
@@ -20,7 +19,6 @@ import matchmakingRoutes from './routes/matchmakingRoutes';
 import mrfRoutes from './routes/mrfRoutes';
 import municipalityRoutes from './routes/municipalityRoutes';
 import { GameService } from './services/gameService';
-import { LobbyService } from './services/lobbyService';
 import { AdminMonitorTelemetryService } from './services/adminMonitorTelemetryService';
 import { WebSocketService } from './services/websocketService';
 import { NotFoundError } from './utils/AppError';
@@ -44,12 +42,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Logging
 app.use(requestLogger);
 
-// Activity logger - captures all mutating actions to ActivityLog collection
-app.use(activityLogger);
-
-// Activity logger - captures all mutating actions to ActivityLog collection
-app.use(activityLogger);
-
 // API Routes - ALL routes go here (after body parsing)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -67,7 +59,7 @@ try {
       }
     }).catch(err => console.error('Failed loading chatbot docs:', err));
   }
-} catch (e) {
+} catch {
   console.warn('No prebuilt chatbot docs found or failed to load.');
 }
 app.use('/api/lobby', lobbyRoutes);
@@ -118,18 +110,48 @@ const PORT = env.PORT;
 // Create HTTP server
 const server = createServer(app);
 
+const socketPingIntervalMs = Math.max(10_000, Number(env.SOCKET_PING_INTERVAL_MS) || 30_000);
+const socketPingTimeoutMs = Math.max(
+  socketPingIntervalMs + 5_000,
+  Number(env.SOCKET_PING_TIMEOUT_MS) || 90_000
+);
+const socketGameStateCoalesceMs = Math.min(
+  500,
+  Math.max(20, Number(env.SOCKET_GAMESTATE_COALESCE_MS) || 75)
+);
+const socketTeamChatRateWindowMs = Math.min(
+  60_000,
+  Math.max(1_000, Number(env.SOCKET_TEAM_CHAT_RATE_WINDOW_MS) || 10_000)
+);
+const socketTeamChatRateMaxMessages = Math.min(
+  200,
+  Math.max(1, Number(env.SOCKET_TEAM_CHAT_RATE_MAX_MESSAGES) || 20)
+);
+const socketTeamChatMaxMessageChars = Math.min(
+  2_000,
+  Math.max(80, Number(env.SOCKET_TEAM_CHAT_MAX_MESSAGE_CHARS) || 400)
+);
+
 // Initialize Socket.IO for real-time communication
 const io = new SocketIOServer(server, {
   cors: {
+
     origin: env.ALLOWED_ORIGINS,
     methods: ['GET', 'POST'],
     credentials: true,
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
+    },
+  pingTimeout: socketPingTimeoutMs,
+  pingInterval: socketPingIntervalMs,
 });
 
 // Initialize WebSocket service
+WebSocketService.configure({
+  gameStateCoalesceMs: socketGameStateCoalesceMs,
+  teamChatRateWindowMs: socketTeamChatRateWindowMs,
+  teamChatRateMaxMessages: socketTeamChatRateMaxMessages,
+  teamChatMaxMessageChars: socketTeamChatMaxMessageChars,
+});
+
 WebSocketService.initialize(io);
 
 const MIN_ADMIN_MONITOR_TELEMETRY_INTERVAL_MS = 15_000;
@@ -147,20 +169,42 @@ if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {
 // Scheduled system checks (every 30 seconds)
 const SYSTEM_CHECK_INTERVAL = 30 * 1000;
 
+const dedupeSessionIdsByRoom = (
+  sessions: Array<{ sessionId: string; gameState?: { roomCode?: string | null } }>
+): string[] => {
+  const canonicalSessionsByRoom = new Map<string, string>();
+
+  for (const session of sessions) {
+    const roomCode = String(session.gameState?.roomCode || '').trim().toUpperCase();
+    const dedupeKey = roomCode || session.sessionId;
+
+    if (!canonicalSessionsByRoom.has(dedupeKey)) {
+      canonicalSessionsByRoom.set(dedupeKey, session.sessionId);
+    }
+  }
+
+  return Array.from(canonicalSessionsByRoom.values());
+};
+
 setInterval(async () => {
   try {
-    const activeSessions = await GameSession.find({
-      'gameState.gameStatus': 'active',
-    });
+    const activeSessions = await GameSession.find(
+      { 'gameState.gameStatus': 'active' },
+      { sessionId: 1, gameState: 1, _id: 0 }
+    ).lean();
 
-    logger.info(`Running system checks for ${activeSessions.length} active games`);
+    const targetSessionIds = dedupeSessionIdsByRoom(activeSessions);
 
-    for (const session of activeSessions) {
+    logger.info(
+      `Running system checks for ${targetSessionIds.length} active room(s) (${activeSessions.length} active session documents)`
+    );
+
+    for (const sessionId of targetSessionIds) {
       try {
-        await GameService.performSystemCheck(session.sessionId);
-        logger.info(`System check completed for session: ${session.sessionId}`);
+        await GameService.performSystemCheck(sessionId);
+        logger.info(`System check completed for session: ${sessionId}`);
       } catch (error) {
-        logger.error(`System check failed for session ${session.sessionId}`, error);
+        logger.error(`System check failed for session ${sessionId}`, error);
       }
     }
   } catch (error) {
@@ -185,17 +229,24 @@ setInterval(async () => {
 // Countdown broadcaster
 setInterval(async () => {
   try {
-    const gamesWithCountdown = await GameSession.find({
-      'gameState.gameOverCountdown.active': true,
-      'gameState.gameStatus': 'active',
-    });
+    const gamesWithCountdown = await GameSession.find(
+      {
+        'gameState.gameOverCountdown.active': true,
+        'gameState.gameStatus': 'active',
+      },
+      { sessionId: 1, gameState: 1, _id: 0 }
+    ).lean();
 
-    for (const session of gamesWithCountdown) {
+    const targetSessionIds = dedupeSessionIdsByRoom(gamesWithCountdown);
+
+    for (const sessionId of targetSessionIds) {
+      const session = gamesWithCountdown.find((item) => item.sessionId === sessionId);
+      if (!session?.gameState) continue;
+
       const gameState = session.gameState;
-      
-      // ✅ FIX: Check if gameOverCountdown exists before accessing
+
       if (
-        gameState.gameOverCountdown && 
+        gameState.gameOverCountdown &&
         gameState.gameOverCountdown.active &&
         gameState.gameOverCountdown.startTime
       ) {
@@ -207,18 +258,17 @@ setInterval(async () => {
         );
 
         if (timeRemaining > 0) {
-          // ✅ Get team info from teams array
-          const team = gameState.teams?.find((t: any) => t.sessionId === session.sessionId);
+          const team = gameState.teams?.find((t: any) => t.sessionId === sessionId);
           const teamLabel = team ? `City ${team.citySlot}` : 'Unknown';
-          
+
           WebSocketService.broadcastSystemMessage(
-            session.sessionId,
+            sessionId,
             `GAME OVER of TEAM ${teamLabel} IN ${Math.ceil(timeRemaining)} SECONDS`,
             'warning'
           );
         } else {
           try {
-            await GameService.performSystemCheck(session.sessionId);
+            await GameService.performSystemCheck(sessionId);
           } catch (err) {
             logger.error('Error finalizing game on countdown expiry', err);
           }
@@ -232,7 +282,14 @@ setInterval(async () => {
 
 server.listen(PORT, () => {
   logger.info(`Besse Backend server running on port ${PORT}`);
-  logger.info(`WebSocket server initialized`);
+  logger.info(
+
+    `WebSocket server initialized (pingInterval=${socketPingIntervalMs}ms, pingTimeout=${socketPingTimeoutMs}ms)`
+  );
+  logger.info(
+    `WebSocket traffic controls enabled (gameStateCoalesce=${socketGameStateCoalesceMs}ms, teamChatLimit=${socketTeamChatRateMaxMessages}/${socketTeamChatRateWindowMs}ms, teamChatMaxChars=${socketTeamChatMaxMessageChars})`
+  );
+
   logger.info(`System checks scheduled every ${SYSTEM_CHECK_INTERVAL / 1000} seconds`);
 
   if (env.ADMIN_MONITOR_TELEMETRY_ENABLED) {

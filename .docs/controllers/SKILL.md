@@ -8,6 +8,8 @@ Controllers are the HTTP adapter layer: they translate requests into service cal
 ### `adminController.ts`
 - Admin-facing endpoints.
 - Delegates authorization-sensitive operations to admin service logic.
+- Handles admin auth, monitor overview, room live overview, player history, and force-exit actions.
+- Activity-log fetch handlers were removed.
 
 ### `authController.ts`
 - Authentication endpoints (login/register/me/refresh/logout patterns as implemented).

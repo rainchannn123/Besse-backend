@@ -16,15 +16,13 @@ export const getGameState = asyncHandler(
       return;
     }
 
-    // ✅ Get current team
-    const team = gameState.teams.find(t => t.sessionId === sessionId);
+    const team = gameState.teams.find((t) => t.sessionId === sessionId);
     if (!team) {
       sendResponse(res, 404, 'Team not found in game');
       return;
     }
 
-    // Check if user is part of this team
-    const isInTeam = 
+    const isInTeam =
       team.players.municipality === userId.toString() ||
       team.players.mrf === userId.toString() ||
       team.players.broker === userId.toString();
@@ -34,31 +32,33 @@ export const getGameState = asyncHandler(
       return;
     }
 
-    // Get user's specific role
-    const userRole = await GameService.getPlayerRole(sessionId, userId);
+    const userRole =
+      team.players.municipality === userId.toString()
+        ? 'municipality'
+        : team.players.mrf === userId.toString()
+          ? 'mrf'
+          : 'broker';
 
-    // ✅ Check team timer
     await GameService.checkTeamTimer(sessionId);
-    
-    // ✅ Check elimination
     await GameService.checkElimination(sessionId);
 
-        // ✅ Get fresh state/team data after checks
     const refreshedGameState = await GameService.getGameState(sessionId);
-    const updatedTeam = await GameService.getTeamData(sessionId);
-    if (!refreshedGameState || !updatedTeam) {
+    if (!refreshedGameState) {
       sendResponse(res, 404, 'Team data not found');
       return;
     }
 
-    // ✅ Get all teams in room for rankings
-    const allTeams = refreshedGameState.teams.map(t => ({
+    const updatedTeam = refreshedGameState.teams.find((t) => t.sessionId === sessionId);
+    if (!updatedTeam) {
+      sendResponse(res, 404, 'Team data not found');
+      return;
+    }
 
+    const allTeams = refreshedGameState.teams.map((t) => ({
       teamId: t.teamId,
       teamName: t.teamName,
       citySlot: t.citySlot,
-            totalScore: t.totalProjectScore || 0,
-
+      totalScore: t.totalProjectScore || 0,
       status: t.gameStatus,
       budget: t.budget,
       health: t.cityHealth,
@@ -66,21 +66,19 @@ export const getGameState = asyncHandler(
       isEliminated: t.isEliminated,
     }));
 
-    // ✅ Calculate team rankings
     const rankings = [...allTeams].sort((a, b) => b.totalScore - a.totalScore);
 
     sendResponse(res, 200, 'Game state retrieved successfully', {
-            gameState: refreshedGameState,
-
+      gameState: refreshedGameState,
       userRole,
       team: updatedTeam,
       rankings,
       allTeams,
-            teamCount: refreshedGameState.teams.length,
-
+      teamCount: refreshedGameState.teams.length,
     });
   }
 );
+
 
 export const endTurn = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {

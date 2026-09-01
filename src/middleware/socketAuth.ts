@@ -6,6 +6,7 @@ import User from '../models/User';
 export interface AuthenticatedSocket extends Socket {
   userId?: string;
   user?: any;
+  authorizedSessionIds?: Set<string>;
 }
 
 /**
@@ -36,10 +37,12 @@ export const socketAuthMiddleware = async (
       return next(new Error('User not found'));
     }
 
-    // Attach user info to socket
+        // Attach user info to socket
     socket.userId = user._id.toString();
-        socket.user = {
+    socket.authorizedSessionIds = new Set<string>();
+    socket.user = {
       _id: user._id,
+
       name: user.name,
       email: user.email,
       role: user.role,

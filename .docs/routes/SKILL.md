@@ -8,6 +8,7 @@ Declares HTTP route endpoints and middleware/controller wiring by domain.
 ### `adminRoutes.ts`
 - Admin endpoint definitions.
 - Applies auth/admin middleware before admin controller handlers.
+- Includes monitor/player/admin-auth routes; activity-log endpoints are removed.
 
 ### `authRoutes.ts`
 - Authentication and session/token related endpoints.

@@ -1,8 +1,6 @@
 import { Router } from 'express';
 import {
   forceExit,
-  getActivityLogs,
-  getActivityLogStats,
   loginAdmin,
   monitoringOverview,
   playerHistory,
@@ -45,9 +43,5 @@ router.patch(
   forceExit
 );
 router.get('/players/:userId/history', protectAdmin, playerHistory);
-
-// ✅ Activity log endpoints
-router.get('/activity-logs', protectAdmin, getActivityLogs);
-router.get('/activity-logs/stats', protectAdmin, getActivityLogStats);
 
 export default router;

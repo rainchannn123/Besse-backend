@@ -19,6 +19,7 @@
 **Role:** Environment variable source of truth.
 - Loads and validates required env vars.
 - Exposes typed config object used across app.
+- Includes websocket reliability/traffic controls (`SOCKET_PING_*`, `SOCKET_GAMESTATE_COALESCE_MS`, team-chat rate/size limits).
 
 **How to work safely:**
 - Add new vars here first, with defaults/validation.
@@ -38,6 +39,7 @@
 - New infra setting: update `env.ts` → consume in relevant modules.
 - DB option tuning: update `database.ts` and verify startup behavior.
 - API docs update: adjust `swagger.ts` and any schema references used by controllers/routes.
+- Websocket runtime tuning: update `env.ts` values, verify clamping/default behavior in `app.ts` and consumption in `services/websocketService.ts`.
 
 ## Dependencies/Touchpoints
 - Used by `src/app.ts` during initialization.

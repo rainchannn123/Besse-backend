@@ -20,6 +20,15 @@ Defines persistent domain entities and schema-level rules used by services.
 ### `User.ts`
 - Represents user identity/profile/auth-related persisted fields.
 
+### `AdminMonitorTelemetry.ts`
+- Stores aggregated live-monitor telemetry snapshots for admin dashboards.
+
+### `MatchmakingRoom.ts`
+- Stores room/team/player seating for matchmaking flows.
+
+## Removed Model
+- `ActivityLog.ts` was removed to stop API activity-history persistence growth.
+
 ## Model Editing Guidelines
 - Keep schemas aligned with service assumptions and API contracts.
 - Add indexes/constraints thoughtfully for query paths used in services.

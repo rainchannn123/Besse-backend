@@ -7,6 +7,7 @@ Houses core backend business logic and orchestration. Services should remain the
 
 ### `adminService.ts`
 - Admin-level domain operations and management workflows.
+- Activity-log retrieval is no longer part of admin service scope.
 
 ### `authService.ts`
 - Authentication workflows (credential handling, token/session logic, user auth state helpers).
@@ -36,6 +37,10 @@ Houses core backend business logic and orchestration. Services should remain the
 ### `websocketService.ts`
 - Real-time event orchestration and broadcasting logic.
 - Works closely with socket auth + lobby/game state changes.
+- Includes socket-level chat authorization cache usage, team-chat flood controls, and coalesced `game-state-update` emission.
+
+## Removed Service
+- `activityLogService.ts` was removed; API activity history is intentionally not persisted.
 
 ### `__tests__/lobbyService.continueToRoleSelection.test.ts`
 - Targeted test coverage for lobby progression behavior.
@@ -53,6 +58,7 @@ Houses core backend business logic and orchestration. Services should remain the
 - Lobby/game bug: trace `lobbyService.ts` ↔ `gameService.ts` ↔ `websocketService.ts`.
 - Score mismatch: inspect `calculationService.ts` input assumptions and model reads.
 - Auth propagation issues: inspect `authService.ts` with middleware/token utils.
+- Websocket load/disconnect issue: inspect `websocketService.ts` + `config/env.ts` + `app.ts` socket runtime settings.
 
 ## Risks
 - Service-to-service coupling can create hidden side effects.

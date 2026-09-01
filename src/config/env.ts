@@ -43,17 +43,27 @@ const envSchema = z.object({
     .transform(
       val =>
         val
-          .replace(/[\[\]]/g, '') // Remove brackets if present
+          .replace(/[[\]]/g, '') // Remove brackets if present
           .split(',') // Split by comma
           // .map(origin => origin.trim())
           .filter(Boolean) // Remove empty strings
     ),
 
-  // Logging level for application logs (error, warn, info, debug)
+    // Logging level for application logs (error, warn, info, debug)
+
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+
+  // Socket heartbeat tuning (helps with transient event-loop stalls under load)
+  SOCKET_PING_INTERVAL_MS: z.string().default('30000').transform(Number),
+  SOCKET_PING_TIMEOUT_MS: z.string().default('90000').transform(Number),
+  SOCKET_GAMESTATE_COALESCE_MS: z.string().default('75').transform(Number),
+  SOCKET_TEAM_CHAT_RATE_WINDOW_MS: z.string().default('10000').transform(Number),
+  SOCKET_TEAM_CHAT_RATE_MAX_MESSAGES: z.string().default('20').transform(Number),
+  SOCKET_TEAM_CHAT_MAX_MESSAGE_CHARS: z.string().default('400').transform(Number),
 
   // Admin monitor controls (separate from player/admin DB accounts)
   ADMIN_MONITOR_ENABLED: z
+
     .string()
     .default('true')
     .transform(value => value === 'true'),
